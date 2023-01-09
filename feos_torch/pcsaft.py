@@ -196,3 +196,16 @@ class PcSaftPure:
         a_V = self.helmholtz_energy(temperature, rho_V) / rho_V
         p = -(a_V - a_L + np.log(rho_V / rho_L)) / (1 / rho_V - 1 / rho_L)
         return p * temperature * (KB * KELVIN / ANGSTROM**3 / PASCAL)
+
+    def equilibrium_liquid_density(self, temperature):
+        density = torch.from_numpy(
+            self.eos.vapor_pressure(temperature.detach().cpu().numpy())
+        )
+        rho_V = density[:, 0]
+        rho_L = density[:, 1]
+        a_L, p_L, dp_L = self.derivatives(temperature, rho_L)
+        a_L /= rho_L
+        a_V = self.helmholtz_energy(temperature, rho_V) / rho_V
+        p = -(a_V - a_L + np.log(rho_V / rho_L)) / (1 / rho_V - 1 / rho_L)
+        liquid_density = rho_L - (p_L - p) / dp_L
+        return liquid_density / ((KILO * MOL / METER**3) * (NAV * ANGSTROM**3))

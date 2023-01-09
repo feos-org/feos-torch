@@ -79,7 +79,7 @@ def test_pcsaft_non_polar():
     pcsaft([1.5, 3.2, 150, 0, 0.03, 2500])
 
 
-def test_gradients():
+def test_gradients_liquid_density():
     params = [1.5, 3.2, 150, 2.5, 0.03, 2500]
     temperature = torch.tensor([300], dtype=torch.float64)
     pressure = torch.tensor([1e5], dtype=torch.float64)
@@ -96,5 +96,57 @@ def test_gradients():
         xh = [xj + hi if j == i else xj for j, xj in enumerate(params)]
         xh = torch.tensor([xh], requires_grad=True, dtype=torch.float64)
         grad = (PcSaftPure(xh).liquid_density(temperature, pressure) - rho0) / hi
-        print(np.abs((grad.item() - x.grad[0, i].item()) / x.grad[0, i].item()))
+        print(
+            grad.item(),
+            x.grad[0, i].item(),
+            np.abs((grad.item() - x.grad[0, i].item()) / x.grad[0, i].item()),
+        )
+        assert np.abs((grad.item() - x.grad[0, i].item()) / x.grad[0, i].item()) < 1e-4
+
+
+def test_gradients_vapor_pressure():
+    params = [1.5, 3.2, 150, 2.5, 0.03, 2500]
+    temperature = torch.tensor([300], dtype=torch.float64)
+
+    x = torch.tensor([params], requires_grad=True, dtype=torch.float64)
+    eos = PcSaftPure(x)
+    eos.vapor_pressure(temperature).backward()
+
+    h = 0.000000005
+    rho0 = PcSaftPure(x).vapor_pressure(temperature)
+    print(x.grad)
+    for i in range(6):
+        hi = params[i] * h
+        xh = [xj + hi if j == i else xj for j, xj in enumerate(params)]
+        xh = torch.tensor([xh], requires_grad=True, dtype=torch.float64)
+        grad = (PcSaftPure(xh).vapor_pressure(temperature) - rho0) / hi
+        print(
+            grad.item(),
+            x.grad[0, i].item(),
+            np.abs((grad.item() - x.grad[0, i].item()) / x.grad[0, i].item()),
+        )
+        assert np.abs((grad.item() - x.grad[0, i].item()) / x.grad[0, i].item()) < 1e-4
+
+
+def test_gradients_equilibrium_liquid_density():
+    params = [1.5, 3.2, 150, 2.5, 0.03, 2500]
+    temperature = torch.tensor([300], dtype=torch.float64)
+
+    x = torch.tensor([params], requires_grad=True, dtype=torch.float64)
+    eos = PcSaftPure(x)
+    eos.equilibrium_liquid_density(temperature).backward()
+
+    h = 0.000000005
+    rho0 = PcSaftPure(x).equilibrium_liquid_density(temperature)
+    print(x.grad)
+    for i in range(6):
+        hi = params[i] * h
+        xh = [xj + hi if j == i else xj for j, xj in enumerate(params)]
+        xh = torch.tensor([xh], requires_grad=True, dtype=torch.float64)
+        grad = (PcSaftPure(xh).equilibrium_liquid_density(temperature) - rho0) / hi
+        print(
+            grad.item(),
+            x.grad[0, i].item(),
+            np.abs((grad.item() - x.grad[0, i].item()) / x.grad[0, i].item()),
+        )
         assert np.abs((grad.item() - x.grad[0, i].item()) / x.grad[0, i].item()) < 1e-4
