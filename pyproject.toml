@@ -1,0 +1,13 @@
+[build-system]
+requires = ["maturin>=0.13,<0.14"]
+build-backend = "maturin"
+
+[tool.maturin]
+bindings = "pyo3"
+
+[project]
+dependencies = [
+  'torch >= 1.12.0, < 2',
+  'numpy',
+  'si_units'
+]

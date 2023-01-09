@@ -1,0 +1,28 @@
+[package]
+name = "feos-torch"
+version = "0.1.0"
+authors = ["Philipp Rehner <prehner@ethz.ch>"]
+edition = "2021"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+description = "FeOs - A framework for equations of state and classical density functional theory."
+homepage = "https://github.com/feos-org"
+repository = "https://github.com/feos-org/feos-torch"
+keywords = ["physics", "thermodynamics", "equations_of_state", "phase_equilibria"]
+categories = ["science"]
+
+[lib]
+name = "feos_torch"
+crate-type = ["cdylib"]
+
+[dependencies]
+quantity = "0.5"
+feos = { version = "0.3", features = ["pcsaft"] }
+feos-core = "0.3"
+ndarray = { version = "0.15", features = ["rayon"] }
+pyo3 = { version = "0.17", features = ["extension-module", "abi3", "abi3-py37"] }
+numpy = "0.17"
+
+[profile.release-lto]
+inherits = "release"
+lto = true
