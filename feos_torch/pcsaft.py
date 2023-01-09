@@ -1,5 +1,4 @@
 import torch
-from torch import Tensor
 import numpy as np
 
 from si_units import KELVIN, KB, ANGSTROM, NAV, PASCAL, MOL, METER, KILO, JOULE
