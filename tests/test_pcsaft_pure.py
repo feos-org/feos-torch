@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from feos_torch.pcsaft import PcSaftPure
+from feos_torch.pcsaft_pure import PcSaftPure
 from feos.eos import State, Contributions, PhaseEquilibrium, EquationOfState
 from feos.pcsaft import PcSaftParameters, PcSaftRecord, Identifier, PureRecord
 from feos.si import ANGSTROM, NAV, KELVIN, KB, PASCAL, KILO, MOL, METER

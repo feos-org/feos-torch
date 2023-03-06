@@ -99,8 +99,7 @@ class PcSaftPure:
         )
         self.kappa_ab = parameters[:, 4]
         self.epsilon_k_ab = parameters[:, 5]
-
-        self.eos = PcSaftParallel(parameters.detach().cpu().numpy())
+        self.parameters = parameters.detach().cpu().numpy()
 
     def helmholtz_energy(self, temperature, density):
         # temperature dependent segment diameter
@@ -142,7 +141,7 @@ class PcSaftPure:
 
         # dipoles
         mu2 = self.mu2 * e * s3
-        m = self.m.minimum(torch.full(self.m.shape, 2, dtype=torch.float64))
+        m = self.m.clamp(max=2)
         m1 = (m - 1) / m
         m2 = m1 * (m - 2) / m
         J1 = 0
@@ -177,8 +176,10 @@ class PcSaftPure:
 
     def liquid_density(self, temperature, pressure):
         density = torch.from_numpy(
-            self.eos.liquid_density(
-                temperature.detach().cpu().numpy(), pressure.detach().cpu().numpy()
+            PcSaftParallel.liquid_density(
+                self.parameters,
+                temperature.detach().cpu().numpy(),
+                pressure.detach().cpu().numpy(),
             )
         )
         pressure = pressure * (PASCAL / (KB * temperature * KELVIN) * ANGSTROM**3)
@@ -188,7 +189,9 @@ class PcSaftPure:
 
     def vapor_pressure(self, temperature):
         density = torch.from_numpy(
-            self.eos.vapor_pressure(temperature.detach().cpu().numpy())
+            PcSaftParallel.vapor_pressure(
+                self.parameters, temperature.detach().cpu().numpy()
+            )
         )
         rho_V = density[:, 0]
         rho_L = density[:, 1]
@@ -199,7 +202,9 @@ class PcSaftPure:
 
     def equilibrium_liquid_density(self, temperature):
         density = torch.from_numpy(
-            self.eos.vapor_pressure(temperature.detach().cpu().numpy())
+            PcSaftParallel.vapor_pressure(
+                self.parameters, temperature.detach().cpu().numpy()
+            )
         )
         rho_V = density[:, 0]
         rho_L = density[:, 1]

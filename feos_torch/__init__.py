@@ -1,2 +1,3 @@
 from .feos_torch import PcSaftParallel
-from .pcsaft import PcSaftPure
+from .pcsaft_pure import PcSaftPure
+from .pcsaft_mix import PcSaftMix
