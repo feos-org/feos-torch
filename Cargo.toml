@@ -17,8 +17,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 quantity = "0.6"
-#feos = { version = "0.4", features = ["pcsaft"] }
-feos = { path = "../feos", features = ["pcsaft"] }
+#feos = { version = "0.4", features = ["pcsaft", "gc_pcsaft"] }
+feos = { path = "../feos", features = ["pcsaft", "gc_pcsaft"] }
 #feos-core = "0.4"
 feos-core = { path = "../feos/feos-core" }
 ndarray = { version = "0.15", features = ["rayon"] }

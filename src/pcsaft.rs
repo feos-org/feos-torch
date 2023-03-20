@@ -1,11 +1,17 @@
 #![warn(clippy::all)]
 #![allow(clippy::borrow_deref_ref)]
+use feos::pcsaft::{PcSaft, PcSaftParameters, PcSaftRecord};
+use feos_core::joback::JobackRecord;
+use feos_core::parameter::{Parameter, PureRecord};
+use feos_core::{DensityInitialization, PhaseEquilibrium, State};
+use ndarray::{arr1, s, Array1, Array2, ArrayView1, ArrayView2, ArrayView3, Zip};
+use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3, ToPyArray};
 use pyo3::prelude::*;
 use quantity::si::{ANGSTROM, KELVIN, MOL, NAV, PASCAL};
 use std::sync::Arc;
 
 #[pyclass]
-struct PcSaftParallel;
+pub struct PcSaftParallel;
 
 #[pymethods]
 impl PcSaftParallel {
@@ -139,8 +145,7 @@ fn build_record(parameter: ArrayView1<f64>) -> PureRecord<PcSaftRecord, JobackRe
         None,
         Some(parameter[4]),
         Some(parameter[5]),
-        Some(parameter[6]),
-        Some(parameter[7]),
+        None,
         None,
         None,
         None,
@@ -245,17 +250,4 @@ fn dew_point_(
             }
         });
     rho
-}
-
-mod gc_pcsaft;
-mod pcsaft;
-use gc_pcsaft::GcPcSaftParallel;
-use pcsaft::PcSaftParallel;
-
-#[pymodule]
-pub fn feos_torch(_: Python<'_>, m: &PyModule) -> PyResult<()> {
-    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
-
-    m.add_class::<PcSaftParallel>()?;
-    m.add_class::<GcPcSaftParallel>()
 }
