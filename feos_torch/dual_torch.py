@@ -189,5 +189,10 @@ class Dual2:
             return Dual2(re, eps1, eps2)
         return Dual2(self.re - other, self.eps1, self.eps2)
 
+    def recip(self):
+        rec = 1 / self.re
+        return Dual2(rec, -rec * rec * self.eps1, -rec * rec * self.eps2)
+
 
 Dual2.__radd__ = Dual2.__add__
+Dual2.__rmul__ = Dual2.__mul__

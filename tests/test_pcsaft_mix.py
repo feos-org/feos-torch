@@ -8,14 +8,17 @@ from feos.si import ANGSTROM, NAV, KELVIN, KB, PASCAL, RGAS, BAR
 
 def test_pcsaft():
     params = [
-        [[1.5, 3.2, 150, 0, 0, 0], [2.5, 3.5, 250, 0, 0, 0]],
-        [[1.5, 3.2, 150, 2.5, 0, 0], [2.5, 3.5, 250, 0, 0, 0]],
-        [[1.5, 3.2, 150, 0, 0, 0], [2.5, 3.5, 250, 2, 0, 0]],
-        [[1.5, 3.2, 150, 2.5, 0, 0], [2.5, 3.5, 250, 2, 0, 0]],
-        [[1.5, 3.2, 150, 0, 0.03, 2500], [2.5, 3.5, 250, 0, 0, 0]],
-        [[1.5, 3.2, 150, 0, 0, 0], [2.5, 3.5, 250, 0, 0.025, 1500]],
-        [[1.5, 3.2, 150, 0, 0.03, 2500], [2.5, 3.5, 250, 0, 0.025, 1500]],
-        [[1.5, 3.2, 150, 2.5, 0.03, 2500], [2.5, 3.5, 250, 2, 0.025, 1500]],
+        [[1.5, 3.2, 150, 0, 0, 0, 0, 0], [2.5, 3.5, 250, 0, 0, 0, 0, 0]],
+        [[1.5, 3.2, 150, 2.5, 0, 0, 0, 0], [2.5, 3.5, 250, 0, 0, 0, 0, 0]],
+        [[1.5, 3.2, 150, 0, 0, 0, 0, 0], [2.5, 3.5, 250, 2, 0, 0, 0, 0]],
+        [[1.5, 3.2, 150, 2.5, 0, 0, 0, 0], [2.5, 3.5, 250, 2, 0, 0, 0, 0]],
+        [[1.5, 3.2, 150, 0, 0.03, 2500, 1, 1], [2.5, 3.5, 250, 0, 0, 0, 0, 0]],
+        [[1.5, 3.2, 150, 0, 0, 0, 0, 0], [2.5, 3.5, 250, 0, 0.025, 1500, 1, 1]],
+        [[1.5, 3.2, 150, 0, 0.03, 2500, 1, 1], [2.5, 3.5, 250, 0, 0.025, 1500, 1, 1]],
+        [[1.5, 3.2, 150, 2.5, 0.03, 2500, 1, 1], [2.5, 3.5, 250, 2, 0.025, 1500, 1, 1]],
+        [[1.5, 3.2, 150, 0, 0.03, 2500, 1, 1], [2.5, 3.5, 250, 0, 0.025, 1500, 0, 1]],
+        [[1.5, 3.2, 150, 0, 0.03, 2500, 0, 1], [2.5, 3.5, 250, 0, 0.025, 1500, 1, 1]],
+        [[1.5, 3.2, 150, 0, 0, 0, 0, 0], [2.5, 3.5, 250, 0, 0.025, 1500, 0, 1]],
     ]
     kij = torch.tensor([-0.05] * len(params), dtype=torch.float64)
     x = torch.tensor(params, dtype=torch.float64)
@@ -33,6 +36,8 @@ def test_pcsaft():
                 p[3],
                 kappa_ab=p[4],
                 epsilon_k_ab=p[5],
+                na=p[6],
+                nb=p[7],
             )
             for p in param
         ]
@@ -53,8 +58,8 @@ def test_pcsaft():
         for s in states
     ]
     p_feos = [s.pressure() * (ANGSTROM**3 / KB / s.temperature) for s in states]
-    v1_feos = [s.molar_volume()[0] / (NAV * ANGSTROM**3) for s in states]
-    v2_feos = [s.molar_volume()[1] / (NAV * ANGSTROM**3) for s in states]
+    v1_feos = [s.partial_molar_volume()[0] / (NAV * ANGSTROM**3) for s in states]
+    v2_feos = [s.partial_molar_volume()[1] / (NAV * ANGSTROM**3) for s in states]
     mu1_feos = [
         s.chemical_potential(Contributions.ResidualNvt)[0] / RGAS / s.temperature
         for s in states
@@ -69,7 +74,19 @@ def test_pcsaft():
     _, p, mu, v = eos.derivatives(temperature, density)
 
     for i, s in enumerate(
-        ["np/np", "p/np", "np/p", "p/p", "a/np", "np/a", "a/a", "ap/ap"]
+        [
+            "np/np",
+            "p/np",
+            "np/p",
+            "p/p",
+            "a/np",
+            "np/a",
+            "a/a",
+            "ap/ap",
+            "a/x",
+            "x/a",
+            "np/x",
+        ]
     ):
         print(
             f"{s:5} feos: {a_feos[i]:.16f} {mu1_feos[i]:.16f} {mu2_feos[i]:.16f} {p_feos[i]:.16f} {v1_feos[i]:.16f} {v2_feos[i]:.16f}"
@@ -84,6 +101,7 @@ def test_pcsaft():
     assert np.abs(p_feos[-1] - p[-1].item()) < 1e-14
     assert np.abs(v1_feos[-1] - v[-1, 0].item()) < 1e-12
     assert np.abs(v2_feos[-1] - v[-1, 1].item()) < 1e-12
+    assert False
 
 
 def test_bubble_point():
@@ -91,7 +109,7 @@ def test_bubble_point():
     kij = -0.15
     kij = torch.tensor([kij, kij + h], dtype=torch.float64, requires_grad=True)
     params = torch.tensor(
-        [[[1, 3.5, 150, 0, 0, 0], [1, 3.5, 200, 0, 0, 0]]] * len(kij),
+        [[[1, 3.5, 150, 0, 0, 0, 0, 0], [1, 3.5, 200, 0, 0, 0, 0, 0]]] * len(kij),
         dtype=torch.float64,
     )
     temperature = torch.tensor(
@@ -104,7 +122,7 @@ def test_bubble_point():
         [0.5] * len(params), dtype=torch.float64, requires_grad=True
     )
     eos = PcSaftMix(params, kij)
-    p = eos.bubble_point(temperature, liquid_molefracs, pressure)
+    p, _ = eos.bubble_point(temperature, liquid_molefracs, pressure)
     p[0].backward()
     print(kij.grad[0].item())
 
@@ -146,7 +164,7 @@ def test_dew_point():
     kij = -0.15
     kij = torch.tensor([kij, kij + h], dtype=torch.float64, requires_grad=True)
     params = torch.tensor(
-        [[[1, 3.5, 150, 0, 0, 0], [1, 3.5, 200, 0, 0, 0]]] * len(kij),
+        [[[1, 3.5, 150, 0, 0, 0, 0, 0], [1, 3.5, 200, 0, 0, 0, 0, 0]]] * len(kij),
         dtype=torch.float64,
     )
     temperature = torch.tensor(
@@ -159,7 +177,7 @@ def test_dew_point():
         [0.5] * len(params), dtype=torch.float64, requires_grad=True
     )
     eos = PcSaftMix(params, kij)
-    p = eos.dew_point(temperature, vapor_molefracs, pressure)
+    p, _ = eos.dew_point(temperature, vapor_molefracs, pressure)
     p[0].backward()
     print(kij.grad[0].item())
 

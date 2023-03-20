@@ -22,6 +22,8 @@ class PcSaftMix:
         )
         self.kappa_ab = parameters[:, :, 4]
         self.epsilon_k_ab = parameters[:, :, 5]
+        self.na = parameters[:, :, 6]
+        self.nb = parameters[:, :, 7]
         self.parameters = parameters.detach().cpu().numpy()
         self.kij = kij
         self.kij_np = None if kij is None else kij.detach().cpu().numpy()
@@ -117,7 +119,7 @@ class PcSaftMix:
         if torch.any(associating > 2):
             raise Exception("Only up to two associating components are allowed!")
 
-        self_associating = associating == 1
+        self_associating = (associating == 1) & (self.na.sum(dim=1) == 1)
         phi[self_associating, :] += self.phi_assoc(
             self_associating,
             temperature[self_associating],
@@ -127,7 +129,7 @@ class PcSaftMix:
             zeta3_m1[self_associating, :],
         )
 
-        cross_associating = associating == 2
+        cross_associating = (associating == 2) & (self.na.sum(dim=1) == 2)
         phi[cross_associating, :] += self.phi_cross_assoc(
             cross_associating,
             temperature[cross_associating],
@@ -135,6 +137,16 @@ class PcSaftMix:
             d[cross_associating],
             zeta2[cross_associating, :],
             zeta3_m1[cross_associating, :],
+        )
+
+        induced_associating = (associating == 2) & (self.na.sum(dim=1) == 1)
+        phi[induced_associating, :] += self.phi_induced_assoc(
+            induced_associating,
+            temperature[induced_associating],
+            density[induced_associating, :],
+            d[induced_associating],
+            zeta2[induced_associating, :],
+            zeta3_m1[induced_associating, :],
         )
 
         return phi
@@ -259,6 +271,64 @@ class PcSaftMix:
         f = lambda x: 2 * x.log() - x + 1
         return density[:, 0:1] * f(xa0) + density[:, 1:2] * f(xa1)
 
+    def phi_induced_assoc(self, associating, temperature, density, d, zeta2, zeta3_m1):
+        sigma = self.sigma[associating, :]
+        kappa_ab = self.kappa_ab[associating, :]
+        epsilon_k_ab = self.epsilon_k_ab[associating, :]
+        na0 = self.na[associating, 0:1]
+        na1 = self.na[associating, 1:2]
+        nb0 = self.nb[associating, 0:1]
+        nb1 = self.nb[associating, 1:2]
+
+        is_assoc = (kappa_ab * epsilon_k_ab).sign()
+        n = is_assoc.shape[1]
+
+        if n > 2:
+            raise Exception(
+                "Induced associaion is only implemented for binary mixtures!"
+            )
+
+        delta_rho = (
+            lambda i, j: association_strength(
+                i, j, temperature, sigma, kappa_ab, epsilon_k_ab, d, zeta2, zeta3_m1
+            )
+            * density[:, j : j + 1]
+        )
+        d00 = delta_rho(0, 0)
+        d01 = delta_rho(0, 1)
+        d10 = delta_rho(1, 0)
+        d11 = delta_rho(1, 1)
+
+        xa0, xa1 = 0.2, 0.2
+
+        for _ in range(50):
+            xa0 = Dual2(xa0, 1, 0)
+            xa1 = Dual2(xa1, 0, 1)
+            xb0 = (1 + xa0 * na0 * d00 + xa1 * na1 * d01).recip()
+            xb1 = (1 + xa0 * na0 * d10 + xa1 * na1 * d11).recip()
+            f0 = xa0 * (1 + nb0 * xb0 * d00 + nb1 * xb1 * d01) - 1
+            f1 = xa1 * (1 + nb0 * xb0 * d10 + nb1 * xb1 * d11) - 1
+
+            g0 = f0.re
+            g1 = f1.re
+            j00 = f0.eps1
+            j01 = f0.eps2
+            j10 = f1.eps1
+            j11 = f1.eps2
+            det = j00 * j11 - j01 * j10
+            xa0 = xa0.re - (j11 * g0 - j01 * g1) / det
+            xa1 = xa1.re - (-j10 * g0 + j00 * g1) / det
+            xb0 = 1 / (1 + xa0 * na0 * d00 + xa1 * na1 * d01)
+            xb1 = 1 / (1 + xa0 * na0 * d10 + xa1 * na1 * d11)
+
+            if g0.norm() < 1e-10 and g1.norm() < 1e-10:
+                break
+
+        f = lambda x: x.log() - 0.5 * x + 0.5
+        return density[:, 0:1] * (f(xa0) * na0 + f(xb0) * nb0) + density[:, 1:2] * (
+            f(xa1) * na1 + f(xb1) * nb1
+        )
+
     def derivatives(self, temperature, density):
         (k, n) = density.shape
         volume = DualTensor(
@@ -318,7 +388,9 @@ class PcSaftMix:
             vapor_molefracs.detach().cpu().numpy(),
             pressure.detach().cpu().numpy(),
         )
-        nans = np.isnan(density[:, 0]) | (density[:, 0] < 1e-20)# | (density[:,0] < 0.1*(pressure/temperature).detach().numpy()*(PASCAL*ANGSTROM**3/KB/KELVIN))# | (density[:, 0] < 1e-20)
+        nans = np.isnan(density[:, 0]) | (
+            density[:, 0] < 1e-20
+        )  # | (density[:,0] < 0.1*(pressure/temperature).detach().numpy()*(PASCAL*ANGSTROM**3/KB/KELVIN))# | (density[:, 0] < 1e-20)
         density = torch.from_numpy(density[~nans, :])
         temperature = temperature[~nans]
         self.reduce(nans)
