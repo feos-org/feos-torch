@@ -8,7 +8,7 @@ use ndarray::{arr1, s, Array1, Array2, ArrayView1, ArrayView2, ArrayView3, Zip};
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3, ToPyArray};
 use pyo3::prelude::*;
 use quantity::si::{ANGSTROM, KELVIN, MOL, NAV, PASCAL};
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[pyclass]
 struct PcSaftParallel;
@@ -90,7 +90,7 @@ fn vapor_pressure_(parameters: ArrayView2<f64>, temperature: ArrayView1<f64>) ->
         .and(&temperature)
         .par_for_each(|mut rho, par, &t| {
             let params = PcSaftParameters::new_pure(build_record(par));
-            let eos = Rc::new(PcSaft::new(Rc::new(params)));
+            let eos = Arc::new(PcSaft::new(Arc::new(params)));
             let vle = PhaseEquilibrium::pure(&eos, t * KELVIN, None, Default::default());
             match vle {
                 Err(_) => rho.fill(f64::NAN),
@@ -121,7 +121,7 @@ fn liquid_density_(
         .and(&pressure)
         .par_map_collect(|par, &t, &p| {
             let params = PcSaftParameters::new_pure(build_record(par));
-            let eos = Rc::new(PcSaft::new(Rc::new(params)));
+            let eos = Arc::new(PcSaft::new(Arc::new(params)));
             let state = State::new_npt(
                 &eos,
                 t * KELVIN,
@@ -150,6 +150,7 @@ fn build_record(parameter: ArrayView1<f64>) -> PureRecord<PcSaftRecord, JobackRe
         None,
         None,
         None,
+        None,
     );
     PureRecord::new(Default::default(), 0.0, record, None)
 }
@@ -173,7 +174,7 @@ fn bubble_point_(
                 par.outer_iter().map(build_record).collect(),
                 Some(kij.into()),
             );
-            let eos = Rc::new(PcSaft::new(Rc::new(params)));
+            let eos = Arc::new(PcSaft::new(Arc::new(params)));
             let vle = PhaseEquilibrium::bubble_point(
                 &eos,
                 t * KELVIN,
@@ -222,7 +223,7 @@ fn dew_point_(
                 par.outer_iter().map(build_record).collect(),
                 Some(kij.into()),
             );
-            let eos = Rc::new(PcSaft::new(Rc::new(params)));
+            let eos = Arc::new(PcSaft::new(Arc::new(params)));
             let vle = PhaseEquilibrium::dew_point(
                 &eos,
                 t * KELVIN,
