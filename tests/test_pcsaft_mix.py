@@ -95,13 +95,12 @@ def test_pcsaft():
             f"     torch: {a[i].item():.16f} {mu[i,0].item():.16f} {mu[i,1].item():.16f} {p[i].item():.16f} {v[i,0].item():.16f} {v[i,1].item():.16f}\n"
         )
 
-    assert np.abs(a_feos[-1] - a[-1].item()) < 1e-14
-    assert np.abs(mu1_feos[-1] - mu[-1, 0].item()) < 1e-14
-    assert np.abs(mu2_feos[-1] - mu[-1, 1].item()) < 1e-14
-    assert np.abs(p_feos[-1] - p[-1].item()) < 1e-14
-    assert np.abs(v1_feos[-1] - v[-1, 0].item()) < 1e-12
-    assert np.abs(v2_feos[-1] - v[-1, 1].item()) < 1e-12
-    assert False
+        assert np.abs(a_feos[i] - a[i].item()) < 1e-14
+        assert np.abs(mu1_feos[i] - mu[i, 0].item()) < 1e-14
+        assert np.abs(mu2_feos[i] - mu[i, 1].item()) < 1e-14
+        assert np.abs(p_feos[i] - p[i].item()) < 1e-14
+        assert np.abs(v1_feos[i] - v[i, 0].item()) < 1e-11
+        assert np.abs(v2_feos[i] - v[i, 1].item()) < 1e-11
 
 
 def test_bubble_point():

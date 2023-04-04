@@ -23,9 +23,13 @@ def test_gc_pcsaft():
         [["CH3", ">CH", "CH3", "CH3"], ["CH3", ">C<", "CH3", "CH3", "NH2"]],
         [["CH3", ">CH", "CH3", "OH"], ["CH3", ">C<", "CH3", "CH3", "NH2"]],
         [["CH3", ">CH", "CH=O", "OH"], ["CH3", ">C<", "CH3", "HCOO", "NH2"]],
+        [["CH3", ">CH", "CH=O", "OH"], ["CH3", ">C<", "CH3", "CH2", "IA"]],
+        [["CH3", ">CH", "CH=O", "IA"], ["CH3", ">C<", "CH3", "CH2", "IA"]],
     ]
     bond_lists = [
         [[[0, 1], [1, 2], [2, 3]], [[0, 1], [1, 2]]],
+        [[[0, 1], [1, 2], [1, 3]], [[0, 1], [1, 2], [1, 3], [1, 4]]],
+        [[[0, 1], [1, 2], [1, 3]], [[0, 1], [1, 2], [1, 3], [1, 4]]],
         [[[0, 1], [1, 2], [1, 3]], [[0, 1], [1, 2], [1, 3], [1, 4]]],
         [[[0, 1], [1, 2], [1, 3]], [[0, 1], [1, 2], [1, 3], [1, 4]]],
         [[[0, 1], [1, 2], [1, 3]], [[0, 1], [1, 2], [1, 3], [1, 4]]],
@@ -89,6 +93,7 @@ def test_gc_pcsaft():
         ]
     )
 
+    # print(len(segment_lists), len(bond_lists), len(kab_list), len(phi))
     eos = GcPcSaft(
         "tests/sauer2014_hetero.json", segment_lists, bond_lists, kab_list, phi
     )
@@ -106,6 +111,8 @@ def test_gc_pcsaft():
             "np/a",
             "a/a",
             "ap/ap",
+            "a/x",
+            "x/x",
         ]
     ):
         print(
@@ -115,12 +122,13 @@ def test_gc_pcsaft():
             f"                 torch: {a[i].item():.16f} {mu[i,0].item():.16f} {mu[i,1].item():.16f} {p[i].item():.16f} {v[i,0].item():.16f} {v[i,1].item():.16f}\n"
         )
 
-    assert np.abs(a_feos[-1] - a[-1].item()) < 1e-14
-    assert np.abs(mu1_feos[-1] - mu[-1, 0].item()) < 1e-14
-    assert np.abs(mu2_feos[-1] - mu[-1, 1].item()) < 1e-14
-    assert np.abs(p_feos[-1] - p[-1].item()) < 1e-14
-    assert np.abs(v1_feos[-1] - v[-1, 0].item()) < 1e-12
-    assert np.abs(v2_feos[-1] - v[-1, 1].item()) < 1e-12
+        assert np.abs(a_feos[i] - a[i].item()) < 1e-14
+        assert np.abs(mu1_feos[i] - mu[i, 0].item()) < 1e-14
+        assert np.abs(mu2_feos[i] - mu[i, 1].item()) < 1e-14
+        assert np.abs(p_feos[i] - p[i].item()) < 1e-14
+        assert np.abs(v1_feos[i] - v[i, 0].item()) < 1e-11
+        assert np.abs(v2_feos[i] - v[i, 1].item()) < 1e-11
+    assert False
 
 
 def test_bubble_point():

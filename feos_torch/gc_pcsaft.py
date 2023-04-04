@@ -88,6 +88,8 @@ class GcPcSaft:
         epsilon_k_ab = torch.tensor(
             [r.get("epsilon_k_ab", 0) for r in model_records], dtype=torch.float64
         )
+        na = torch.tensor([r.get("na", 0) for r in model_records], dtype=torch.float64)
+        nb = torch.tensor([r.get("nb", 0) for r in model_records], dtype=torch.float64)
         self.is_assoc = segments * (kappa_ab * epsilon_k_ab).sign()
         if torch.any(self.is_assoc.sum(dim=2) > 1):
             raise Exception(
@@ -97,6 +99,8 @@ class GcPcSaft:
         self.epsilon_k_assoc = (self.is_assoc * self.epsilon_k).sum(dim=2)
         self.kappa_ab = (segments * kappa_ab).sum(dim=2)
         self.epsilon_k_ab = (segments * epsilon_k_ab).sum(dim=2)
+        self.na = (segments * na).sum(dim=2)
+        self.nb = (segments * nb).sum(dim=2)
 
         # FeOs interface
         phi_np = np.ones_like(self.m_mix) if phi is None else phi.detach().numpy()
@@ -213,11 +217,12 @@ class GcPcSaft:
         )
 
         # association
-        associating = torch.count_nonzero(self.kappa_ab * self.epsilon_k_ab, dim=1)
-        if torch.any(associating > 2):
-            raise Exception("Only up to two associating components are allowed!")
+        associating_segm = torch.count_nonzero(self.kappa_ab * self.epsilon_k_ab, dim=1)
+        self_associating_segm = torch.count_nonzero(self.na * self.nb, dim=1)
+        if torch.any(associating_segm > 2):
+            raise Exception("Only up to two associating segments are allowed!")
 
-        self_associating = associating == 1
+        self_associating = (associating_segm == 1) & (self_associating_segm == 1)
         phi[self_associating, :] += self.phi_assoc(
             self_associating,
             temperature[self_associating],
@@ -226,13 +231,22 @@ class GcPcSaft:
             zeta3_m1[self_associating, :],
         )
 
-        cross_associating = associating == 2
+        cross_associating = (associating_segm == 2) & (self_associating_segm == 2)
         phi[cross_associating, :] += self.phi_cross_assoc(
             cross_associating,
             temperature[cross_associating],
             density[cross_associating, :],
             zeta2[cross_associating, :],
             zeta3_m1[cross_associating, :],
+        )
+
+        induced_associating = (associating_segm == 2) & (self_associating_segm == 1)
+        phi[induced_associating, :] += self.phi_induced_assoc(
+            induced_associating,
+            temperature[induced_associating],
+            density[induced_associating, :],
+            zeta2[induced_associating, :],
+            zeta3_m1[induced_associating, :],
         )
 
         return phi
@@ -314,6 +328,7 @@ class GcPcSaft:
         xa = 2 / ((1 + 4 * deltarho).sqrt() + 1)
         return rho * (2 * xa.log() - xa + 1)
 
+    # WARNING! Hardcoded for nA=nB=1
     def phi_cross_assoc(self, associating, temperature, density, zeta2, zeta3_m1):
         sigma = self.sigma_assoc[associating, :]
         epsilon_k = self.epsilon_k_assoc[associating, :]
@@ -362,6 +377,67 @@ class GcPcSaft:
 
         f = lambda x: 2 * x.log() - x + 1
         return density[:, 0:1] * f(xa0) + density[:, 1:2] * f(xa1)
+
+    # WARNING! Hardcoded für nA=0
+    def phi_induced_assoc(self, associating, temperature, density, zeta2, zeta3_m1):
+        sigma = self.sigma_assoc[associating, :]
+        epsilon_k = self.epsilon_k_assoc[associating, :]
+        kappa_ab = self.kappa_ab[associating, :]
+        epsilon_k_ab = self.epsilon_k_ab[associating, :]
+        na0 = self.na[associating, 0:1]
+        na1 = self.na[associating, 1:2]
+        nb0 = self.nb[associating, 0:1]
+        nb1 = self.nb[associating, 1:2]
+
+        d = sigma * (1 - 0.12 * (-3 * epsilon_k / temperature[:, None]).exp())
+
+        is_assoc = (kappa_ab * epsilon_k_ab).sign()
+        n = is_assoc.shape[1]
+
+        if n > 2:
+            raise Exception(
+                "Induced association is only implemented for binary mixtures!"
+            )
+
+        delta_rho = (
+            lambda i, j: association_strength(
+                i, j, temperature, sigma, kappa_ab, epsilon_k_ab, d, zeta2, zeta3_m1
+            )
+            * density[:, j : j + 1]
+        )
+        d00 = delta_rho(0, 0)
+        d01 = delta_rho(0, 1)
+        d10 = delta_rho(1, 0)
+        d11 = delta_rho(1, 1)
+
+        xa = 0.2
+
+        for _ in range(50):
+            xa = Dual2(xa, 1, 0)
+            xb0_i = 1 + xa * (na0 * d00 + na1 * d01)
+            xb1_i = 1 + xa * (na0 * d10 + na1 * d11)
+            f0 = (
+                xa * (xb0_i * xb1_i + nb0 * xb1_i * d00 + nb1 * xb0_i * d01)
+                - xb0_i * xb1_i
+            )
+            f1 = (
+                xa * (xb0_i * xb1_i + nb0 * xb1_i * d10 + nb1 * xb0_i * d11)
+                - xb0_i * xb1_i
+            )
+            f = na0 * f0 + na1 * f1
+
+            xa = xa.re - f.re / f.eps1
+
+            if f.re.norm() < 1e-10:
+                break
+
+        xb0 = 1 / (1 + xa * (na0 * d00 + na1 * d01))
+        xb1 = 1 / (1 + xa * (na0 * d10 + na1 * d11))
+
+        f = lambda x: x.log() - 0.5 * x + 0.5
+        return density[:, 0:1] * (f(xa) * na0 + f(xb0) * nb0) + density[:, 1:2] * (
+            f(xa) * na1 + f(xb1) * nb1
+        )
 
     def derivatives(self, temperature, density):
         (k, n) = density.shape
