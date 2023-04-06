@@ -14,17 +14,15 @@ from .pcsaft_pure import A0, A1, A2, B0, B1, B2, AD, BD, CD
 class GcPcSaft:
     def __init__(
         self,
-        segment_records_path,
+        segment_identifier,
+        parameter,
         segment_lists,
         bond_lists,
         binary_segment_records,
         phi=None,
     ):
-        with open(segment_records_path) as f:
-            segment_records = json.load(f)
-        segment_identifier = [r["identifier"] for r in segment_records]
+        m, sigma, epsilon_k, mu, kappa_ab, epsilon_k_ab, na, nb = parameter
         segment_indices = dict((s, i) for i, s in enumerate(segment_identifier))
-        model_records = [r["model_record"] for r in segment_records]
 
         segments = [[Counter(s) for s in seg] for seg in segment_lists]
         segments = [
@@ -55,14 +53,9 @@ class GcPcSaft:
         self.bonds = torch.tensor(bonds, dtype=torch.float64)
 
         # basic parameters
-        m = torch.tensor([r["m"] for r in model_records], dtype=torch.float64)
         self.m = segments * m
-        self.sigma = torch.tensor(
-            [r["sigma"] for r in model_records], dtype=torch.float64
-        )
-        self.epsilon_k = torch.tensor(
-            [r["epsilon_k"] for r in model_records], dtype=torch.float64
-        )
+        self.sigma = sigma
+        self.epsilon_k = epsilon_k
         self.phi = phi
 
         self.kab = torch.zeros([len(segment_identifier)] * 2, dtype=torch.float64)
@@ -71,7 +64,6 @@ class GcPcSaft:
             self.kab[segment_indices[s2], segment_indices[s1]] = k
 
         # dipole parameters
-        mu = torch.tensor([r.get("mu", 0) for r in model_records], dtype=torch.float64)
         self.m_mix = (segments * m).sum(dim=2)
         self.sigma_mix = ((segments * m * self.sigma**3).sum(dim=2) / self.m_mix) ** (
             1 / 3
@@ -82,14 +74,6 @@ class GcPcSaft:
         )
 
         # association parameters
-        kappa_ab = torch.tensor(
-            [r.get("kappa_ab", 0) for r in model_records], dtype=torch.float64
-        )
-        epsilon_k_ab = torch.tensor(
-            [r.get("epsilon_k_ab", 0) for r in model_records], dtype=torch.float64
-        )
-        na = torch.tensor([r.get("na", 0) for r in model_records], dtype=torch.float64)
-        nb = torch.tensor([r.get("nb", 0) for r in model_records], dtype=torch.float64)
         self.is_assoc = segments * (kappa_ab * epsilon_k_ab).sign()
         if torch.any(self.is_assoc.sum(dim=2) > 1):
             raise Exception(
@@ -104,8 +88,26 @@ class GcPcSaft:
 
         # FeOs interface
         phi_np = np.ones_like(self.m_mix) if phi is None else phi.detach().numpy()
+        segment_records = [
+            (
+                ident,
+                np.array(
+                    [
+                        m[i].item(),
+                        sigma[i].item(),
+                        epsilon_k[i].item(),
+                        mu[i].item(),
+                        kappa_ab[i].item(),
+                        epsilon_k_ab[i].item(),
+                        na[i].item(),
+                        nb[i].item(),
+                    ]
+                ),
+            )
+            for i, ident in enumerate(segment_identifier)
+        ]
         self.gc_pcsaft = GcPcSaftParallel(
-            segment_records_path,
+            segment_records,
             segment_lists,
             bond_lists,
             binary_segment_records,
@@ -521,6 +523,8 @@ class GcPcSaft:
         self.is_assoc = self.is_assoc[~nans]
         self.kappa_ab = self.kappa_ab[~nans]
         self.epsilon_k_ab = self.epsilon_k_ab[~nans]
+        self.na = self.na[~nans]
+        self.nb = self.nb[~nans]
         self.sigma_assoc = self.sigma_assoc[~nans, :]
         self.epsilon_k_assoc = self.epsilon_k_assoc[~nans, :]
         self.bonds = self.bonds[~nans]

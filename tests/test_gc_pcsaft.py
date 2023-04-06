@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import json
 from feos_torch.gc_pcsaft import GcPcSaft
 from feos.eos import State, Contributions, PhaseEquilibrium, EquationOfState
 from feos.gc_pcsaft import (
@@ -93,10 +94,7 @@ def test_gc_pcsaft():
         ]
     )
 
-    # print(len(segment_lists), len(bond_lists), len(kab_list), len(phi))
-    eos = GcPcSaft(
-        "tests/sauer2014_hetero.json", segment_lists, bond_lists, kab_list, phi
-    )
+    eos = GcPcSaft(*parse_segments(), segment_lists, bond_lists, kab_list, phi)
     a = eos.helmholtz_energy_density(temperature, density)
     _, p, mu, v = eos.derivatives(temperature, density)
 
@@ -128,7 +126,6 @@ def test_gc_pcsaft():
         assert np.abs(p_feos[i] - p[i].item()) < 1e-14
         assert np.abs(v1_feos[i] - v[i, 0].item()) < 1e-11
         assert np.abs(v2_feos[i] - v[i, 1].item()) < 1e-11
-    assert False
 
 
 def test_bubble_point():
@@ -145,9 +142,7 @@ def test_bubble_point():
     temperature = torch.tensor([150], dtype=torch.float64, requires_grad=True)
     pressure = torch.tensor([1e5], dtype=torch.float64, requires_grad=True)
     liquid_molefracs = torch.tensor([0.5], dtype=torch.float64, requires_grad=True)
-    eos = GcPcSaft(
-        "tests/sauer2014_hetero.json", segment_lists, bond_lists, kab_list, phi
-    )
+    eos = GcPcSaft(*parse_segments(), segment_lists, bond_lists, kab_list, phi)
     p, _ = eos.bubble_point(temperature, liquid_molefracs, pressure)
     p[0].backward()
     print(kab.grad[0].item())
@@ -194,9 +189,7 @@ def test_dew_point():
     temperature = torch.tensor([150], dtype=torch.float64, requires_grad=True)
     pressure = torch.tensor([1e5], dtype=torch.float64, requires_grad=True)
     vapor_molefracs = torch.tensor([0.5], dtype=torch.float64, requires_grad=True)
-    eos = GcPcSaft(
-        "tests/sauer2014_hetero.json", segment_lists, bond_lists, kab_list, phi
-    )
+    eos = GcPcSaft(*parse_segments(), segment_lists, bond_lists, kab_list, phi)
     p, _ = eos.dew_point(temperature, vapor_molefracs, pressure)
     p[0].backward()
     print(kab.grad[0].item())
@@ -228,3 +221,38 @@ def test_dew_point():
 
     assert np.abs(p[0].item() - p_feos[0]) < 1e-8
     assert np.abs(kab.grad[0].item() - (p_feos[1] - p_feos[0]) / h) < 1
+
+
+def parse_segments():
+    with open("tests/sauer2014_hetero.json") as f:
+        segment_records = json.load(f)
+    segment_identifier = [r["identifier"] for r in segment_records]
+    m = torch.tensor(
+        [r["model_record"]["m"] for r in segment_records], dtype=torch.float64
+    )
+    sigma = torch.tensor(
+        [r["model_record"]["sigma"] for r in segment_records], dtype=torch.float64
+    )
+    epsilon_k = torch.tensor(
+        [r["model_record"]["epsilon_k"] for r in segment_records], dtype=torch.float64
+    )
+    mu = torch.tensor(
+        [r["model_record"].get("mu", 0) for r in segment_records], dtype=torch.float64
+    )
+    kappa_ab = torch.tensor(
+        [r["model_record"].get("kappa_ab", 0) for r in segment_records],
+        dtype=torch.float64,
+    )
+    epsilon_k_ab = torch.tensor(
+        [r["model_record"].get("epsilon_k_ab", 0) for r in segment_records],
+        dtype=torch.float64,
+    )
+    na = torch.tensor(
+        [r["model_record"].get("na", 0) for r in segment_records], dtype=torch.float64
+    )
+    nb = torch.tensor(
+        [r["model_record"].get("nb", 0) for r in segment_records], dtype=torch.float64
+    )
+    parameter = (m, sigma, epsilon_k, mu, kappa_ab, epsilon_k_ab, na, nb)
+
+    return segment_identifier, parameter

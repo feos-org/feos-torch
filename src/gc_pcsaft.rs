@@ -1,5 +1,6 @@
 #![warn(clippy::all)]
 #![allow(clippy::borrow_deref_ref)]
+use feos::association::AssociationRecord;
 use feos::gc_pcsaft::{GcPcSaft, GcPcSaftEosParameters, GcPcSaftRecord};
 use feos_core::joback::JobackRecord;
 use feos_core::parameter::{BinaryRecord, ChemicalRecord, ParameterHetero, SegmentRecord};
@@ -22,14 +23,33 @@ pub struct GcPcSaftParallel {
 impl GcPcSaftParallel {
     #[new]
     fn new(
-        path: String,
+        segment_records: Vec<(String, PyReadonlyArray1<f64>)>,
         segments: Vec<[Vec<String>; 2]>,
         bonds: Vec<[Vec<[usize; 2]>; 2]>,
         binary_segment_records: Vec<(String, String, f64)>,
         phi: &PyArray2<f64>,
     ) -> Self {
+        let segment_records = segment_records
+            .into_iter()
+            .map(|(i, m)| {
+                let m = m.as_array();
+                SegmentRecord::new(
+                    i,
+                    0.0,
+                    GcPcSaftRecord::new(
+                        m[0],
+                        m[1],
+                        m[2],
+                        Some(m[3]),
+                        Some(AssociationRecord::new(m[4], m[5], m[6], m[7], 0.0)),
+                        None,
+                    ),
+                    None,
+                )
+            })
+            .collect();
         Self {
-            segment_records: SegmentRecord::from_json(path).unwrap(),
+            segment_records,
             chemical_records: segments
                 .into_iter()
                 .zip(bonds.into_iter())
