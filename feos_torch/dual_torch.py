@@ -25,6 +25,9 @@ class DualTensor:
         self.eps2[key] = value.eps2
         self.eps1eps2[key + (slice(None, None, None),)] = value.eps1eps2
 
+    def __len__(self):
+        return self.re.__len__()
+
     def sum(self, dim, keepdim):
         re = self.re.sum(dim, keepdim=keepdim)
         eps1 = self.eps1.sum(dim, keepdim=keepdim)
@@ -44,6 +47,9 @@ class DualTensor:
                 and torch.all(self.eps1eps2 == other.eps1eps2)
             )
         return False
+
+    def __lt__(self, other):
+        return self.re < other
 
     def __add__(self, other):
         if isinstance(other, DualTensor):

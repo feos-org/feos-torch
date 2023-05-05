@@ -302,7 +302,7 @@ class PcSaftMix:
         d10 = delta_rho(1, 0)
         d11 = delta_rho(1, 1)
 
-        xa = 0.2
+        xa = 0.2 * d00 / d00
 
         for _ in range(50):
             xa = Dual2(xa, 1, 0)
@@ -318,7 +318,12 @@ class PcSaftMix:
             )
             f = na0 * f0 + na1 * f1
 
-            xa = xa.re - f.re / f.eps1
+            delta_x = f.re / f.eps1
+            xa_old = xa.re
+            xa = xa_old - delta_x
+            for i in range(len(xa)):
+                if xa[(i,)] < 0:
+                    xa[(i,)] = 0.2 * xa_old[(i,)]
 
             if f.re.norm() < 1e-10:
                 break
