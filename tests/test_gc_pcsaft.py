@@ -67,7 +67,7 @@ def test_gc_pcsaft():
         for eos in gc_pcsaft
     ]
     a_feos = [
-        s.molar_helmholtz_energy(Contributions.ResidualNvt)
+        s.molar_helmholtz_energy(Contributions.Residual)
         * (s.density / KB / s.temperature * ANGSTROM**3)
         for s in states
     ]
@@ -75,11 +75,11 @@ def test_gc_pcsaft():
     v1_feos = [s.partial_molar_volume()[0] / (NAV * ANGSTROM**3) for s in states]
     v2_feos = [s.partial_molar_volume()[1] / (NAV * ANGSTROM**3) for s in states]
     mu1_feos = [
-        s.chemical_potential(Contributions.ResidualNvt)[0] / RGAS / s.temperature
+        s.chemical_potential(Contributions.Residual)[0] / RGAS / s.temperature
         for s in states
     ]
     mu2_feos = [
-        s.chemical_potential(Contributions.ResidualNvt)[1] / RGAS / s.temperature
+        s.chemical_potential(Contributions.Residual)[1] / RGAS / s.temperature
         for s in states
     ]
 

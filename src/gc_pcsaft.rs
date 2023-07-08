@@ -2,7 +2,6 @@
 #![allow(clippy::borrow_deref_ref)]
 use feos::association::AssociationRecord;
 use feos::gc_pcsaft::{GcPcSaft, GcPcSaftEosParameters, GcPcSaftRecord};
-use feos_core::joback::JobackRecord;
 use feos_core::parameter::{BinaryRecord, ChemicalRecord, ParameterHetero, SegmentRecord};
 use feos_core::PhaseEquilibrium;
 use ndarray::{arr1, s, Array2, ArrayView1, Zip};
@@ -13,7 +12,7 @@ use std::sync::Arc;
 
 #[pyclass]
 pub struct GcPcSaftParallel {
-    segment_records: Vec<SegmentRecord<GcPcSaftRecord, JobackRecord>>,
+    segment_records: Vec<SegmentRecord<GcPcSaftRecord>>,
     chemical_records: Vec<[ChemicalRecord; 2]>,
     binary_segment_records: Vec<BinaryRecord<String, f64>>,
     phi: Array2<f64>,
@@ -44,7 +43,6 @@ impl GcPcSaftParallel {
                         Some(AssociationRecord::new(m[4], m[5], m[6], m[7], 0.0)),
                         None,
                     ),
-                    None,
                 )
             })
             .collect();

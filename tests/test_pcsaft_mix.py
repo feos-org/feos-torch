@@ -2,7 +2,14 @@ import torch
 import numpy as np
 from feos_torch.pcsaft_mix import PcSaftMix
 from feos.eos import State, Contributions, PhaseEquilibrium, EquationOfState
-from feos.pcsaft import PcSaftParameters, PcSaftRecord, Identifier, PureRecord
+from feos.pcsaft import (
+    PcSaftParameters,
+    PcSaftRecord,
+    Identifier,
+    PureRecord,
+    PcSaftBinaryRecord,
+    BinaryRecord,
+)
 from feos.si import ANGSTROM, NAV, KELVIN, KB, PASCAL, RGAS, BAR
 
 
@@ -17,10 +24,14 @@ def test_pcsaft():
         [[1.5, 3.2, 150, 0, 0.03, 2500, 1, 1], [2.5, 3.5, 250, 0, 0.025, 1500, 1, 1]],
         [[1.5, 3.2, 150, 2.5, 0.03, 2500, 1, 1], [2.5, 3.5, 250, 2, 0.025, 1500, 1, 1]],
         [[1.5, 3.2, 150, 0, 0.03, 2500, 1, 1], [2.5, 3.5, 250, 0, 0.025, 1500, 0, 1]],
-        [[1.5, 3.2, 150, 0, 0.03, 2500, 0, 2], [2.5, 3.5, 250, 0, 0.025, 1500, 1, 1]],
+        [[1.5, 3.2, 150, 0, 0.03, -500, 0, 2], [2.5, 3.5, 250, 0, 0.025, 1500, 1, 1]],
         [[1.5, 3.2, 150, 0, 0, 0, 0, 0], [2.5, 3.5, 250, 0, 0.025, 1500, 0, 1]],
+        [[1.5, 3.2, 150, 0, 0.03, 2500, 2, 2], [2.5, 3.5, 250, 0, 0.025, 1500, 1, 1]],
+        [[1.5, 3.2, 150, 0, 0.03, 2500, 2, 2], [2.5, 3.5, 250, 0, 0.025, 1500, 1, 1]],
+        [[1.5, 3.2, 150, 0, 0.03, 2500, 1, 2], [2.5, 3.5, 250, 0, 0.025, 1500, 2, 1]],
     ]
-    kij = torch.tensor([-0.05] * len(params), dtype=torch.float64)
+    kij = torch.tensor([[-0.05, 0]] * len(params), dtype=torch.float64)
+    kij[12, 1] = 3000
     x = torch.tensor(params, dtype=torch.float64)
     T = 300
     temperature = torch.tensor([T] * len(params), dtype=torch.float64)
@@ -45,15 +56,26 @@ def test_pcsaft():
     ]
     records = [[PureRecord(Identifier(), 1, r) for r in record] for record in records]
     pcsaft = [
-        EquationOfState.pcsaft(PcSaftParameters.new_binary(record, kij))
-        for record, kij in zip(records, kij)
+        EquationOfState.pcsaft(
+            PcSaftParameters.new_binary(
+                record,
+                kij
+                if epsilon_k_ab == 0
+                else BinaryRecord(
+                    Identifier(),
+                    Identifier(),
+                    PcSaftBinaryRecord(kij, None, epsilon_k_ab),
+                ),
+            )
+        )
+        for record, (kij, epsilon_k_ab) in zip(records, kij)
     ]
     states = [
         State(eos, T * KELVIN, partial_density=np.array(rho) / (NAV * ANGSTROM**3))
         for eos in pcsaft
     ]
     a_feos = [
-        s.molar_helmholtz_energy(Contributions.ResidualNvt)
+        s.molar_helmholtz_energy(Contributions.Residual)
         * (s.density / KB / s.temperature * ANGSTROM**3)
         for s in states
     ]
@@ -61,11 +83,11 @@ def test_pcsaft():
     v1_feos = [s.partial_molar_volume()[0] / (NAV * ANGSTROM**3) for s in states]
     v2_feos = [s.partial_molar_volume()[1] / (NAV * ANGSTROM**3) for s in states]
     mu1_feos = [
-        s.chemical_potential(Contributions.ResidualNvt)[0] / RGAS / s.temperature
+        s.chemical_potential(Contributions.Residual)[0] / RGAS / s.temperature
         for s in states
     ]
     mu2_feos = [
-        s.chemical_potential(Contributions.ResidualNvt)[1] / RGAS / s.temperature
+        s.chemical_potential(Contributions.Residual)[1] / RGAS / s.temperature
         for s in states
     ]
 
@@ -86,6 +108,9 @@ def test_pcsaft():
             "a/x",
             "x/a",
             "np/x",
+            "aa/a",
+            "a/a k",
+            "aa/aa",
         ]
     ):
         print(
@@ -106,9 +131,15 @@ def test_pcsaft():
 def test_bubble_point():
     h = 1e-8
     kij = -0.15
-    kij = torch.tensor([kij, kij + h], dtype=torch.float64, requires_grad=True)
+    epsilon_k_aibj = 1000
+    kij = torch.tensor(
+        [[kij, epsilon_k_aibj], [kij + h, epsilon_k_aibj]],
+        dtype=torch.float64,
+        requires_grad=True,
+    )
     params = torch.tensor(
-        [[[1, 3.5, 150, 0, 0, 0, 0, 0], [1, 3.5, 200, 0, 0, 0, 0, 0]]] * len(kij),
+        [[[1, 3.5, 150, 0, 0.02, 1500, 1, 1], [1, 3.5, 200, 0, 0.03, 2500, 1, 1]]]
+        * len(kij),
         dtype=torch.float64,
     )
     temperature = torch.tensor(
@@ -123,7 +154,7 @@ def test_bubble_point():
     eos = PcSaftMix(params, kij)
     p, _ = eos.bubble_point(temperature, liquid_molefracs, pressure)
     p[0].backward()
-    print(kij.grad[0].item())
+    print(kij.grad[(0, 0)].item())
 
     records = [
         [
@@ -134,6 +165,8 @@ def test_bubble_point():
                 p[3],
                 kappa_ab=p[4],
                 epsilon_k_ab=p[5],
+                na=p[6],
+                nb=p[7],
             )
             for p in param
         ]
@@ -141,8 +174,17 @@ def test_bubble_point():
     ]
     records = [[PureRecord(Identifier(), 1, r) for r in record] for record in records]
     pcsaft = [
-        EquationOfState.pcsaft(PcSaftParameters.new_binary(record, kij))
-        for record, kij in zip(records, kij)
+        EquationOfState.pcsaft(
+            PcSaftParameters.new_binary(
+                record,
+                BinaryRecord(
+                    Identifier(),
+                    Identifier(),
+                    PcSaftBinaryRecord(kij, None, epsilon_k_aibj),
+                ),
+            )
+        )
+        for record, (kij, epsilon_k_aibj) in zip(records, kij)
     ]
     p_feos = [
         PhaseEquilibrium.bubble_point(
@@ -155,13 +197,15 @@ def test_bubble_point():
 
     assert np.abs(p[0].item() - p_feos[0]) < 1e-8
     assert np.abs(p[1].item() - p_feos[1]) < 1e-8
-    assert np.abs(kij.grad[0].item() - (p_feos[1] - p_feos[0]) / h) < 1
+    assert np.abs(kij.grad[(0, 0)].item() - (p_feos[1] - p_feos[0]) / h) < 1
 
 
 def test_dew_point():
     h = 1e-8
     kij = -0.15
-    kij = torch.tensor([kij, kij + h], dtype=torch.float64, requires_grad=True)
+    kij = torch.tensor(
+        [[kij, 0], [kij + h, 0]], dtype=torch.float64, requires_grad=True
+    )
     params = torch.tensor(
         [[[1, 3.5, 150, 0, 0, 0, 0, 0], [1, 3.5, 200, 0, 0, 0, 0, 0]]] * len(kij),
         dtype=torch.float64,
@@ -178,7 +222,7 @@ def test_dew_point():
     eos = PcSaftMix(params, kij)
     p, _ = eos.dew_point(temperature, vapor_molefracs, pressure)
     p[0].backward()
-    print(kij.grad[0].item())
+    print(kij.grad[(0, 0)].item())
 
     records = [
         [
@@ -197,7 +241,7 @@ def test_dew_point():
     records = [[PureRecord(Identifier(), 1, r) for r in record] for record in records]
     pcsaft = [
         EquationOfState.pcsaft(PcSaftParameters.new_binary(record, kij))
-        for record, kij in zip(records, kij)
+        for record, (kij, _) in zip(records, kij)
     ]
     p_feos = [
         PhaseEquilibrium.dew_point(
@@ -212,4 +256,4 @@ def test_dew_point():
 
     assert np.abs(p[0].item() - p_feos[0]) < 1e-8
     assert np.abs(p[1].item() - p_feos[1]) < 1e-8
-    assert np.abs(kij.grad[0].item() - (p_feos[1] - p_feos[0]) / h) < 1
+    assert np.abs(kij.grad[(0, 0)].item() - (p_feos[1] - p_feos[0]) / h) < 1

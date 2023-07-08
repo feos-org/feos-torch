@@ -1,13 +1,12 @@
 #![warn(clippy::all)]
 #![allow(clippy::borrow_deref_ref)]
-use feos::pcsaft::{PcSaft, PcSaftParameters, PcSaftRecord};
-use feos_core::joback::JobackRecord;
+use feos::pcsaft::{PcSaft, PcSaftBinaryRecord, PcSaftParameters, PcSaftRecord};
 use feos_core::parameter::{Parameter, PureRecord};
-use feos_core::{DensityInitialization, PhaseEquilibrium, State};
+use feos_core::{DensityInitialization, EosUnit, PhaseEquilibrium, State};
 use ndarray::{arr1, s, Array1, Array2, ArrayView1, ArrayView2, ArrayView3, Zip};
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3, ToPyArray};
 use pyo3::prelude::*;
-use quantity::si::{ANGSTROM, KELVIN, MOL, NAV, PASCAL};
+use quantity::si::{SIUnit, ANGSTROM, KELVIN, MOL, NAV, PASCAL};
 use std::sync::Arc;
 
 #[pyclass]
@@ -45,7 +44,7 @@ impl PcSaftParallel {
     #[staticmethod]
     fn bubble_point<'py>(
         parameters: PyReadonlyArray3<f64>,
-        kij: PyReadonlyArray1<f64>,
+        kij: PyReadonlyArray2<f64>,
         temperature: PyReadonlyArray1<f64>,
         liquid_molefracs: PyReadonlyArray1<f64>,
         pressure: PyReadonlyArray1<f64>,
@@ -65,7 +64,7 @@ impl PcSaftParallel {
     #[staticmethod]
     fn dew_point<'py>(
         parameters: PyReadonlyArray3<f64>,
-        kij: PyReadonlyArray1<f64>,
+        kij: PyReadonlyArray2<f64>,
         temperature: PyReadonlyArray1<f64>,
         vapor_molefracs: PyReadonlyArray1<f64>,
         pressure: PyReadonlyArray1<f64>,
@@ -136,7 +135,7 @@ fn liquid_density_(
         })
 }
 
-fn build_record(parameter: ArrayView1<f64>) -> PureRecord<PcSaftRecord, JobackRecord> {
+fn build_record(parameter: ArrayView1<f64>) -> PureRecord<PcSaftRecord> {
     let record = PcSaftRecord::new(
         parameter[0],
         parameter[1],
@@ -152,27 +151,28 @@ fn build_record(parameter: ArrayView1<f64>) -> PureRecord<PcSaftRecord, JobackRe
         None,
         None,
     );
-    PureRecord::new(Default::default(), 0.0, record, None)
+    PureRecord::new(Default::default(), 0.0, record)
 }
 
 fn bubble_point_(
     parameters: ArrayView3<f64>,
-    kij: ArrayView1<f64>,
+    kij: ArrayView2<f64>,
     temperature: ArrayView1<f64>,
     liquid_molefracs: ArrayView1<f64>,
     pressure: ArrayView1<f64>,
 ) -> Array2<f64> {
-    let mut rho = Array2::zeros([temperature.len(), 4]);
+    let mut rho = Array2::zeros([temperature.len(), 5]);
     Zip::from(rho.rows_mut())
         .and(parameters.outer_iter())
-        .and(kij)
+        .and(kij.outer_iter())
         .and(temperature)
         .and(liquid_molefracs)
         .and(pressure)
-        .par_for_each(|mut rho, par, &kij, &t, &x, &p| {
+        .par_for_each(|mut rho, par, kij, &t, &x, &p| {
+            let epsilon_k_ab = if kij[1] == 0.0 { None } else { Some(kij[1]) };
             let params = PcSaftParameters::new_binary(
                 par.outer_iter().map(build_record).collect(),
-                Some(kij.into()),
+                Some(PcSaftBinaryRecord::new(Some(kij[0]), None, epsilon_k_ab)),
             );
             let eos = Arc::new(PcSaft::new(Arc::new(params)));
             let vle = PhaseEquilibrium::bubble_point(
@@ -198,6 +198,11 @@ fn bubble_point_(
                         .unwrap();
                     rho.slice_mut(s![0..2usize]).assign(&rho_v);
                     rho.slice_mut(s![2..4usize]).assign(&rho_l);
+                    rho[4] = vle
+                        .liquid()
+                        .pressure(feos_core::Contributions::Total)
+                        .to_reduced(SIUnit::reference_pressure())
+                        .unwrap();
                 }
             }
         });
@@ -206,7 +211,7 @@ fn bubble_point_(
 
 fn dew_point_(
     parameters: ArrayView3<f64>,
-    kij: ArrayView1<f64>,
+    kij: ArrayView2<f64>,
     temperature: ArrayView1<f64>,
     vapor_molefracs: ArrayView1<f64>,
     pressure: ArrayView1<f64>,
@@ -214,14 +219,15 @@ fn dew_point_(
     let mut rho = Array2::zeros([temperature.len(), 4]);
     Zip::from(rho.rows_mut())
         .and(parameters.outer_iter())
-        .and(kij)
+        .and(kij.outer_iter())
         .and(temperature)
         .and(vapor_molefracs)
         .and(pressure)
-        .par_for_each(|mut rho, par, &kij, &t, &y, &p| {
+        .par_for_each(|mut rho, par, kij, &t, &y, &p| {
+            let epsilon_k_ab = if kij[1] == 0.0 { None } else { Some(kij[1]) };
             let params = PcSaftParameters::new_binary(
                 par.outer_iter().map(build_record).collect(),
-                Some(kij.into()),
+                Some(PcSaftBinaryRecord::new(Some(kij[0]), None, epsilon_k_ab)),
             );
             let eos = Arc::new(PcSaft::new(Arc::new(params)));
             let vle = PhaseEquilibrium::dew_point(

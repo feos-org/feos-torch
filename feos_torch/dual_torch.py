@@ -179,6 +179,14 @@ class Dual2:
             return Dual2(re, eps1, eps2)
         return Dual2(self.re * other, self.eps1 * other, self.eps2 * other)
 
+    def __truediv__(self, other):
+        if isinstance(other, Dual2):
+            re = self.re / other.re
+            eps1 = (self.eps1 * other.re - self.re * other.eps1) / (other.re * other.re)
+            eps2 = (self.eps2 * other.re - self.re * other.eps2) / (other.re * other.re)
+            return Dual2(re, eps1, eps2)
+        return Dual2(self.re / other, self.eps1 / other, self.eps2 / other)
+
     def __add__(self, other):
         if isinstance(other, Dual2):
             re = self.re + other.re

@@ -81,7 +81,7 @@ class PcSaftMix:
                     self.epsilon_k[:, i] * self.epsilon_k[:, j]
                 ).sqrt() / temperature
                 if self.kij is not None and i != j:
-                    eps_ij *= 1 - self.kij
+                    eps_ij *= 1 - self.kij[:, 0]
                 sigma_ij = (0.5 * (self.sigma[:, i] + self.sigma[:, j])) ** 3
                 m_ij = self.m[:, i] * self.m[:, j]
                 rhoij = density[:, i : i + 1] * density[:, j : j + 1]
@@ -140,6 +140,7 @@ class PcSaftMix:
             d[cross_associating],
             zeta2[cross_associating, :],
             zeta3_m1[cross_associating, :],
+            self.kij[cross_associating, 1],
         )
 
         induced_associating = (associating_comps == 2) & (self_associating_comps == 1)
@@ -217,7 +218,16 @@ class PcSaftMix:
 
         delta = sum(
             association_strength(
-                i, i, temperature, sigma, kappa_ab, epsilon_k_ab, d, zeta2, zeta3_m1
+                i,
+                i,
+                temperature,
+                sigma,
+                kappa_ab,
+                epsilon_k_ab,
+                None,
+                d,
+                zeta2,
+                zeta3_m1,
             )
             for i in range(sigma.shape[1])
         )
@@ -230,32 +240,54 @@ class PcSaftMix:
         xb = 2 / (sqrt + 1 + (rhoa - rhob) * delta)
         return rhoa * (xa.log() - 0.5 * xa + 0.5) + rhob * (xb.log() - 0.5 * xb + 0.5)
 
-    # WARNING! Hardcoded for nA=nB=1
-    def phi_cross_assoc(self, associating, temperature, density, d, zeta2, zeta3_m1):
+    def phi_cross_assoc(
+        self, associating, temperature, density, d, zeta2, zeta3_m1, epsilon_k_aibj
+    ):
         sigma = self.sigma[associating, :]
         kappa_ab = self.kappa_ab[associating, :]
         epsilon_k_ab = self.epsilon_k_ab[associating, :]
+        rhoa = density * self.na[associating, :]
+        rhob = density * self.nb[associating, :]
 
         if sigma.shape[1] > 2:
             raise Exception("Cross associaion is only implemented for binary mixtures!")
 
-        delta_rho = (
-            lambda i, j: association_strength(
-                i, j, temperature, sigma, kappa_ab, epsilon_k_ab, d, zeta2, zeta3_m1
-            )
-            * density[:, j : j + 1]
+        delta = lambda i, j: association_strength(
+            i,
+            j,
+            temperature,
+            sigma,
+            kappa_ab,
+            epsilon_k_ab,
+            epsilon_k_aibj,
+            d,
+            zeta2,
+            zeta3_m1,
         )
-        d00 = delta_rho(0, 0)
-        d01 = delta_rho(0, 1)
-        d10 = delta_rho(1, 0)
-        d11 = delta_rho(1, 1)
+        d00 = delta(0, 0)
+        d01 = delta(0, 1)
+        d10 = delta(1, 0)
+        d11 = delta(1, 1)
 
-        xa0, xa1 = 0.2, 0.2
+        xa0, xa1 = 0.2 * d00 / d00, 0.2 * d00 / d00
         for _ in range(50):
             xa0 = Dual2(xa0, 1, 0)
             xa1 = Dual2(xa1, 0, 1)
-            f0 = xa0 + xa0 * xa0 * d00 + xa0 * xa1 * d01 - 1
-            f1 = xa1 + xa1 * xa0 * d10 + xa1 * xa1 * d11 - 1
+
+            xb0_i = 1 + xa0 * rhoa[:, 0:1] * d00 + xa1 * rhoa[:, 1:2] * d01
+            xb1_i = 1 + xa0 * rhoa[:, 0:1] * d10 + xa1 * rhoa[:, 1:2] * d11
+
+            f0 = (
+                xa0
+                - 1
+                + xa0 / xb0_i * rhob[:, 0:1] * d00
+                + xa0 / xb1_i * rhob[:, 1:2] * d01
+            )
+            f1 = (
+                (xa1 - 1)
+                + xa1 / xb0_i * rhob[:, 0:1] * d10
+                + xa1 / xb1_i * rhob[:, 1:2] * d11
+            )
 
             g0 = f0.re
             g1 = f1.re
@@ -264,14 +296,31 @@ class PcSaftMix:
             j10 = f1.eps1
             j11 = f1.eps2
             det = j00 * j11 - j01 * j10
-            xa0 = xa0.re - (j11 * g0 - j01 * g1) / det
-            xa1 = xa1.re - (-j10 * g0 + j00 * g1) / det
+
+            delta_xa0 = (j11 * g0 - j01 * g1) / det
+            delta_xa1 = (-j10 * g0 + j00 * g1) / det
+            xa0_old = xa0.re
+            xa1_old = xa1.re
+            xa0 = xa0_old - delta_xa0
+            xa1 = xa1_old - delta_xa1
+            for i in range(len(xa0)):
+                if xa0[(i,)] < 0:
+                    xa0[(i,)] = 0.2 * xa0_old[(i,)]
+                if xa1[(i,)] < 0:
+                    xa1[(i,)] = 0.2 * xa1_old[(i,)]
 
             if g0.norm() < 1e-10 and g1.norm() < 1e-10:
                 break
 
-        f = lambda x: 2 * x.log() - x + 1
-        return density[:, 0:1] * f(xa0) + density[:, 1:2] * f(xa1)
+        xb0 = 1 / (1 + xa0 * rhoa[:, 0:1] * d00 + xa1 * rhoa[:, 1:2] * d01)
+        xb1 = 1 / (1 + xa0 * rhoa[:, 0:1] * d10 + xa1 * rhoa[:, 1:2] * d11)
+        f = lambda x: x.log() - 0.5 * x + 0.5
+        return (
+            rhoa[:, 0:1] * f(xa0)
+            + rhoa[:, 1:2] * f(xa1)
+            + rhob[:, 0:1] * f(xb0)
+            + rhob[:, 1:2] * f(xb1)
+        )
 
     # WARNING! Hardcoded für nA=0
     def phi_induced_assoc(self, associating, temperature, density, d, zeta2, zeta3_m1):
@@ -293,7 +342,16 @@ class PcSaftMix:
 
         delta_rho = (
             lambda i, j: association_strength(
-                i, j, temperature, sigma, kappa_ab, epsilon_k_ab, d, zeta2, zeta3_m1
+                i,
+                j,
+                temperature,
+                sigma,
+                kappa_ab,
+                epsilon_k_ab,
+                None,
+                d,
+                zeta2,
+                zeta3_m1,
             )
             * density[:, j : j + 1]
         )
@@ -444,7 +502,7 @@ def triplet_integral(mijk1, mijk2, etas):
 
 
 def association_strength(
-    i, j, temperature, sigma, kappa_ab, epsilon_k_ab, d, zeta2, zeta3_m1
+    i, j, temperature, sigma, kappa_ab, epsilon_k_ab, epsilon_k_aibj, d, zeta2, zeta3_m1
 ):
     di = d[:, i : i + 1]
     dj = d[:, j : j + 1]
@@ -452,10 +510,17 @@ def association_strength(
     sigma3_kappa_aibj = (sigma[:, i] * sigma[:, j]) ** 1.5 * (
         kappa_ab[:, i] * kappa_ab[:, j]
     ).sqrt()
-    epsilon_k_aibj = 0.5 * (epsilon_k_ab[:, i] + epsilon_k_ab[:, j])
+    if epsilon_k_aibj is not None and i != j:
+        _epsilon_k_aibj = torch.where(
+            epsilon_k_aibj != 0,
+            epsilon_k_aibj,
+            0.5 * (epsilon_k_ab[:, i] + epsilon_k_ab[:, j]),
+        )
+    else:
+        _epsilon_k_aibj = 0.5 * (epsilon_k_ab[:, i] + epsilon_k_ab[:, j])
     return (
         zeta3_m1
         * (k * (2 * k + 3) + 1)
         * sigma3_kappa_aibj[:, None]
-        * ((epsilon_k_aibj[:, None] / temperature[:, None]).exp() - 1)
+        * ((_epsilon_k_aibj[:, None] / temperature[:, None]).exp() - 1)
     )
