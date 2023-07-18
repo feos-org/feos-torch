@@ -61,11 +61,7 @@ def test_pcsaft():
                 record,
                 kij
                 if epsilon_k_ab == 0
-                else BinaryRecord(
-                    Identifier(),
-                    Identifier(),
-                    PcSaftBinaryRecord(kij, None, epsilon_k_ab),
-                ),
+                else PcSaftBinaryRecord(kij, None, epsilon_k_ab),
             )
         )
         for record, (kij, epsilon_k_ab) in zip(records, kij)
@@ -177,11 +173,7 @@ def test_bubble_point():
         EquationOfState.pcsaft(
             PcSaftParameters.new_binary(
                 record,
-                BinaryRecord(
-                    Identifier(),
-                    Identifier(),
-                    PcSaftBinaryRecord(kij, None, epsilon_k_aibj),
-                ),
+                PcSaftBinaryRecord(kij, None, epsilon_k_aibj),
             )
         )
         for record, (kij, epsilon_k_aibj) in zip(records, kij)

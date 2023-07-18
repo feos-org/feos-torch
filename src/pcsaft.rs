@@ -88,7 +88,7 @@ fn vapor_pressure_(parameters: ArrayView2<f64>, temperature: ArrayView1<f64>) ->
         .and(parameters.rows())
         .and(&temperature)
         .par_for_each(|mut rho, par, &t| {
-            let params = PcSaftParameters::new_pure(build_record(par));
+            let params = PcSaftParameters::new_pure(build_record(par)).unwrap();
             let eos = Arc::new(PcSaft::new(Arc::new(params)));
             let vle = PhaseEquilibrium::pure(&eos, t * KELVIN, None, Default::default());
             match vle {
@@ -119,7 +119,7 @@ fn liquid_density_(
         .and(&temperature)
         .and(&pressure)
         .par_map_collect(|par, &t, &p| {
-            let params = PcSaftParameters::new_pure(build_record(par));
+            let params = PcSaftParameters::new_pure(build_record(par)).unwrap();
             let eos = Arc::new(PcSaft::new(Arc::new(params)));
             let state = State::new_npt(
                 &eos,
@@ -173,7 +173,8 @@ fn bubble_point_(
             let params = PcSaftParameters::new_binary(
                 par.outer_iter().map(build_record).collect(),
                 Some(PcSaftBinaryRecord::new(Some(kij[0]), None, epsilon_k_ab)),
-            );
+            )
+            .unwrap();
             let eos = Arc::new(PcSaft::new(Arc::new(params)));
             let vle = PhaseEquilibrium::bubble_point(
                 &eos,
@@ -223,7 +224,8 @@ fn dew_point_(
             let params = PcSaftParameters::new_binary(
                 par.outer_iter().map(build_record).collect(),
                 Some(PcSaftBinaryRecord::new(Some(kij[0]), None, epsilon_k_ab)),
-            );
+            )
+            .unwrap();
             let eos = Arc::new(PcSaft::new(Arc::new(params)));
             let vle = PhaseEquilibrium::dew_point(
                 &eos,

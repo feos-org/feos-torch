@@ -46,7 +46,7 @@ def test_pcsaft():
 
         s = State(pcsaft, temperature_si, density=density_si)
         a_feos = (
-            s.helmholtz_energy(Contributions.ResidualNvt)
+            s.helmholtz_energy(Contributions.Residual)
             / s.volume
             / (KB * temperature_si)
             * ANGSTROM**3
@@ -145,7 +145,7 @@ def test_gradients_equilibrium_liquid_density():
     eos = PcSaftPure(x)
     eos.equilibrium_liquid_density(temperature)[1].backward()
 
-    h = 0.000000005
+    h = 0.0000005
     rho0 = PcSaftPure(x).equilibrium_liquid_density(temperature)[1]
     print(x.grad)
     for i in range(6):
