@@ -2,11 +2,11 @@
 #![allow(clippy::borrow_deref_ref)]
 use feos::pcsaft::{PcSaft, PcSaftBinaryRecord, PcSaftParameters, PcSaftRecord};
 use feos_core::parameter::{Parameter, PureRecord};
-use feos_core::{DensityInitialization, EosUnit, PhaseEquilibrium, State};
+use feos_core::{DensityInitialization, PhaseEquilibrium, State};
 use ndarray::{arr1, s, Array1, Array2, ArrayView1, ArrayView2, ArrayView3, Zip};
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3, ToPyArray};
 use pyo3::prelude::*;
-use quantity::si::{SIUnit, ANGSTROM, KELVIN, MOL, NAV, PASCAL};
+use quantity::si::{ANGSTROM, KELVIN, MOL, NAV, PASCAL};
 use std::sync::Arc;
 
 #[pyclass]
@@ -161,7 +161,7 @@ fn bubble_point_(
     liquid_molefracs: ArrayView1<f64>,
     pressure: ArrayView1<f64>,
 ) -> Array2<f64> {
-    let mut rho = Array2::zeros([temperature.len(), 5]);
+    let mut rho = Array2::zeros([temperature.len(), 4]);
     Zip::from(rho.rows_mut())
         .and(parameters.outer_iter())
         .and(kij.outer_iter())
@@ -198,11 +198,6 @@ fn bubble_point_(
                         .unwrap();
                     rho.slice_mut(s![0..2usize]).assign(&rho_v);
                     rho.slice_mut(s![2..4usize]).assign(&rho_l);
-                    rho[4] = vle
-                        .liquid()
-                        .pressure(feos_core::Contributions::Total)
-                        .to_reduced(SIUnit::reference_pressure())
-                        .unwrap();
                 }
             }
         });
