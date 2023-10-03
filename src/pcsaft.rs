@@ -2,11 +2,11 @@
 #![allow(clippy::borrow_deref_ref)]
 use feos::pcsaft::{PcSaft, PcSaftBinaryRecord, PcSaftParameters, PcSaftRecord};
 use feos_core::parameter::{Parameter, PureRecord};
+use feos_core::si::{KELVIN, MOL, PASCAL};
 use feos_core::{DensityInitialization, PhaseEquilibrium, State};
 use ndarray::{arr1, s, Array1, Array2, ArrayView1, ArrayView2, ArrayView3, Zip};
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3, ToPyArray};
 use pyo3::prelude::*;
-use quantity::si::{ANGSTROM, KELVIN, MOL, NAV, PASCAL};
 use std::sync::Arc;
 
 #[pyclass]
@@ -94,16 +94,8 @@ fn vapor_pressure_(parameters: ArrayView2<f64>, temperature: ArrayView1<f64>) ->
             match vle {
                 Err(_) => rho.fill(f64::NAN),
                 Ok(vle) => {
-                    rho[0] = vle
-                        .vapor()
-                        .density
-                        .to_reduced(ANGSTROM.powi(-3) / NAV)
-                        .unwrap();
-                    rho[1] = vle
-                        .liquid()
-                        .density
-                        .to_reduced(ANGSTROM.powi(-3) / NAV)
-                        .unwrap();
+                    rho[0] = vle.vapor().density.to_reduced();
+                    rho[1] = vle.liquid().density.to_reduced();
                 }
             };
         });
@@ -130,7 +122,7 @@ fn liquid_density_(
             );
             match state {
                 Err(_) => f64::NAN,
-                Ok(state) => state.density.to_reduced(ANGSTROM.powi(-3) / NAV).unwrap(),
+                Ok(state) => state.density.to_reduced(),
             }
         })
 }
@@ -187,16 +179,8 @@ fn bubble_point_(
             match vle {
                 Err(_) => rho.fill(f64::NAN),
                 Ok(vle) => {
-                    let rho_v = vle
-                        .vapor()
-                        .partial_density
-                        .to_reduced(ANGSTROM.powi(-3) / NAV)
-                        .unwrap();
-                    let rho_l = vle
-                        .liquid()
-                        .partial_density
-                        .to_reduced(ANGSTROM.powi(-3) / NAV)
-                        .unwrap();
+                    let rho_v = vle.vapor().partial_density.to_reduced();
+                    let rho_l = vle.liquid().partial_density.to_reduced();
                     rho.slice_mut(s![0..2usize]).assign(&rho_v);
                     rho.slice_mut(s![2..4usize]).assign(&rho_l);
                 }
@@ -238,16 +222,8 @@ fn dew_point_(
             match vle {
                 Err(_) => rho.fill(f64::NAN),
                 Ok(vle) => {
-                    let rho_v = vle
-                        .vapor()
-                        .partial_density
-                        .to_reduced(ANGSTROM.powi(-3) / NAV)
-                        .unwrap();
-                    let rho_l = vle
-                        .liquid()
-                        .partial_density
-                        .to_reduced(ANGSTROM.powi(-3) / NAV)
-                        .unwrap();
+                    let rho_v = vle.vapor().partial_density.to_reduced();
+                    let rho_l = vle.liquid().partial_density.to_reduced();
                     rho.slice_mut(s![0..2usize]).assign(&rho_v);
                     rho.slice_mut(s![2..4usize]).assign(&rho_l);
                 }

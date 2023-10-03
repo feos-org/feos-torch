@@ -3,11 +3,11 @@
 use feos::association::AssociationRecord;
 use feos::gc_pcsaft::{GcPcSaft, GcPcSaftEosParameters, GcPcSaftRecord};
 use feos_core::parameter::{BinaryRecord, ChemicalRecord, ParameterHetero, SegmentRecord};
+use feos_core::si::{KELVIN, PASCAL};
 use feos_core::PhaseEquilibrium;
 use ndarray::{arr1, s, Array2, ArrayView1, Zip};
 use numpy::{PyArray2, PyReadonlyArray1, ToPyArray};
 use pyo3::prelude::*;
-use quantity::si::{ANGSTROM, KELVIN, NAV, PASCAL};
 use std::sync::Arc;
 
 #[pyclass]
@@ -50,7 +50,7 @@ impl GcPcSaftParallel {
             segment_records,
             chemical_records: segments
                 .into_iter()
-                .zip(bonds.into_iter())
+                .zip(bonds)
                 .map(|([s1, s2], [b1, b2])| {
                     [
                         ChemicalRecord::new(Default::default(), s1, Some(b1)),
@@ -135,16 +135,8 @@ impl GcPcSaftParallel {
                 match vle {
                     Err(_) => rho.fill(f64::NAN),
                     Ok(vle) => {
-                        let rho_v = vle
-                            .vapor()
-                            .partial_density
-                            .to_reduced(ANGSTROM.powi(-3) / NAV)
-                            .unwrap();
-                        let rho_l = vle
-                            .liquid()
-                            .partial_density
-                            .to_reduced(ANGSTROM.powi(-3) / NAV)
-                            .unwrap();
+                        let rho_v = vle.vapor().partial_density.to_reduced();
+                        let rho_l = vle.liquid().partial_density.to_reduced();
                         rho.slice_mut(s![0..2usize]).assign(&rho_v);
                         rho.slice_mut(s![2..4usize]).assign(&rho_l);
                     }
@@ -188,16 +180,8 @@ impl GcPcSaftParallel {
                 match vle {
                     Err(_) => rho.fill(f64::NAN),
                     Ok(vle) => {
-                        let rho_v = vle
-                            .vapor()
-                            .partial_density
-                            .to_reduced(ANGSTROM.powi(-3) / NAV)
-                            .unwrap();
-                        let rho_l = vle
-                            .liquid()
-                            .partial_density
-                            .to_reduced(ANGSTROM.powi(-3) / NAV)
-                            .unwrap();
+                        let rho_v = vle.vapor().partial_density.to_reduced();
+                        let rho_l = vle.liquid().partial_density.to_reduced();
                         rho.slice_mut(s![0..2usize]).assign(&rho_v);
                         rho.slice_mut(s![2..4usize]).assign(&rho_l);
                     }

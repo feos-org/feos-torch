@@ -90,7 +90,7 @@ def test_gc_pcsaft():
                 a
                 * (1 / states[-1].volume / KB / states[-1].temperature * ANGSTROM**3),
             )
-            for n, a in states[-1].helmholtz_energy_contributions()
+            for n, a in states[-1].residual_helmholtz_energy_contributions()
         ]
     )
 

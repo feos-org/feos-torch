@@ -16,14 +16,13 @@ name = "feos_torch"
 crate-type = ["cdylib"]
 
 [dependencies]
-quantity = "0.6"
 #feos = { version = "0.4", features = ["pcsaft", "gc_pcsaft"] }
-feos = { git = "https://github.com/feos-org/feos", tag = "paper_vle", features = ["pcsaft", "gc_pcsaft"] }
+feos = { git = "https://github.com/feos-org/feos", features = ["pcsaft", "gc_pcsaft"] }
 #feos-core = "0.4"
-feos-core = { git = "https://github.com/feos-org/feos", tag = "paper_vle" }
+feos-core = { git = "https://github.com/feos-org/feos" }
 ndarray = { version = "0.15", features = ["rayon"] }
-pyo3 = { version = "0.18", features = ["extension-module", "abi3", "abi3-py37"] }
-numpy = "0.18"
+pyo3 = { version = "0.19", features = ["extension-module", "abi3", "abi3-py37"] }
+numpy = "0.19"
 
 [profile.release-lto]
 inherits = "release"
