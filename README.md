@@ -5,7 +5,7 @@ Parallel evaluation of vapor pressures and liquid densities including gradients 
 Install with (needs rust compiler)
 
 ```
-pip install git+https://github.com/feos-org/feos-torch
+pip install git+ssh://git@github.com/feos-org/feos-torch.git
 ```
 
 ## Basic usage
