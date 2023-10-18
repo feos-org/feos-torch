@@ -190,6 +190,7 @@ class PcSaftPure:
         nans = np.isnan(density)
         density = torch.from_numpy(density[~nans])
         temperature = temperature[~nans]
+        pressure = pressure[~nans]
         self.reduce(nans)
 
         pressure = pressure / temperature * (PASCAL / (KB * KELVIN) * ANGSTROM**3)
