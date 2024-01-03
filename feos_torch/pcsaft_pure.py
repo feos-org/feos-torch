@@ -188,7 +188,7 @@ class PcSaftPure:
             pressure.detach().cpu().numpy(),
         )
         nans = np.isnan(density)
-        density = torch.from_numpy(density[~nans])
+        density = torch.from_numpy(density[~nans], device=self.m.device)
         temperature = temperature[~nans]
         pressure = pressure[~nans]
         self.reduce(nans)
@@ -203,7 +203,7 @@ class PcSaftPure:
             self.parameters, temperature.detach().cpu().numpy()
         )
         nans = np.isnan(density[:, 0])
-        density = torch.from_numpy(density[~nans, :])
+        density = torch.from_numpy(density[~nans, :], device=self.m.device)
         temperature = temperature[~nans]
         self.reduce(nans)
 
@@ -219,7 +219,7 @@ class PcSaftPure:
             self.parameters, temperature.detach().cpu().numpy()
         )
         nans = np.isnan(density[:, 0])
-        density = torch.from_numpy(density[~nans, :])
+        density = torch.from_numpy(density[~nans, :], device=self.m.device)
         temperature = temperature[~nans]
         self.reduce(nans)
 
