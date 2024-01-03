@@ -1,9 +1,9 @@
 #![warn(clippy::all)]
 #![allow(clippy::borrow_deref_ref)]
+use feos::core::parameter::{Parameter, PureRecord};
+use feos::core::si::{KELVIN, MOL, PASCAL};
+use feos::core::{DensityInitialization, PhaseEquilibrium, State};
 use feos::pcsaft::{PcSaft, PcSaftBinaryRecord, PcSaftParameters, PcSaftRecord};
-use feos_core::parameter::{Parameter, PureRecord};
-use feos_core::si::{KELVIN, MOL, PASCAL};
-use feos_core::{DensityInitialization, PhaseEquilibrium, State};
 use ndarray::{arr1, s, Array1, Array2, ArrayView1, ArrayView2, ArrayView3, Zip};
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3, ToPyArray};
 use pyo3::prelude::*;

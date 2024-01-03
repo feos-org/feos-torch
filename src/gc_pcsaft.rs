@@ -1,10 +1,10 @@
 #![warn(clippy::all)]
 #![allow(clippy::borrow_deref_ref)]
 use feos::association::AssociationRecord;
+use feos::core::parameter::{BinaryRecord, ChemicalRecord, ParameterHetero, SegmentRecord};
+use feos::core::si::{KELVIN, PASCAL};
+use feos::core::PhaseEquilibrium;
 use feos::gc_pcsaft::{GcPcSaft, GcPcSaftEosParameters, GcPcSaftRecord};
-use feos_core::parameter::{BinaryRecord, ChemicalRecord, ParameterHetero, SegmentRecord};
-use feos_core::si::{KELVIN, PASCAL};
-use feos_core::PhaseEquilibrium;
 use ndarray::{arr1, s, Array2, ArrayView1, Zip};
 use numpy::{PyArray2, PyReadonlyArray1, ToPyArray};
 use pyo3::prelude::*;
