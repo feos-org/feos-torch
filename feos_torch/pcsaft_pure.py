@@ -182,13 +182,13 @@ class PcSaftPure:
         return a.re, density - a.re + density * a.v1, 1 + density * a.v2
 
     def liquid_density(self, temperature, pressure):
-        density = PcSaftParallel.liquid_density(
+        density, nans = PcSaftParallel.liquid_density(
             self.parameters,
             temperature.detach().cpu().numpy(),
             pressure.detach().cpu().numpy(),
         )
-        nans = np.isnan(density)
-        density = torch.from_numpy(density[~nans], device=self.m.device)
+        density = torch.from_numpy(density).to(self.m.device)
+        nans = torch.from_numpy(nans).to(self.m.device)
         temperature = temperature[~nans]
         pressure = pressure[~nans]
         self.reduce(nans)
@@ -199,11 +199,11 @@ class PcSaftPure:
         return nans, density / ((KILO * MOL / METER**3) * (NAV * ANGSTROM**3))
 
     def vapor_pressure(self, temperature):
-        density = PcSaftParallel.vapor_pressure(
+        density, nans = PcSaftParallel.vapor_pressure(
             self.parameters, temperature.detach().cpu().numpy()
         )
-        nans = np.isnan(density[:, 0])
-        density = torch.from_numpy(density[~nans, :], device=self.m.device)
+        density = torch.from_numpy(density).to(self.m.device)
+        nans = torch.from_numpy(nans).to(self.m.device)
         temperature = temperature[~nans]
         self.reduce(nans)
 
@@ -211,15 +211,15 @@ class PcSaftPure:
         rho_L = density[:, 1]
         a_L = self.helmholtz_energy(temperature, rho_L) / rho_L
         a_V = self.helmholtz_energy(temperature, rho_V) / rho_V
-        p = -(a_V - a_L + np.log(rho_V / rho_L)) / (1 / rho_V - 1 / rho_L)
+        p = -(a_V - a_L + (rho_V / rho_L).log()) / (1 / rho_V - 1 / rho_L)
         return nans, p * temperature * (KB * KELVIN / ANGSTROM**3 / PASCAL)
 
     def equilibrium_liquid_density(self, temperature):
-        density = PcSaftParallel.vapor_pressure(
+        density, nans = PcSaftParallel.vapor_pressure(
             self.parameters, temperature.detach().cpu().numpy()
         )
-        nans = np.isnan(density[:, 0])
-        density = torch.from_numpy(density[~nans, :], device=self.m.device)
+        density = torch.from_numpy(density).to(self.m.device)
+        nans = torch.from_numpy(nans).to(self.m.device)
         temperature = temperature[~nans]
         self.reduce(nans)
 
@@ -228,7 +228,7 @@ class PcSaftPure:
         a_L, p_L, dp_L = self.derivatives(temperature, rho_L)
         a_L /= rho_L
         a_V = self.helmholtz_energy(temperature, rho_V) / rho_V
-        p = -(a_V - a_L + np.log(rho_V / rho_L)) / (1 / rho_V - 1 / rho_L)
+        p = -(a_V - a_L + (rho_V / rho_L).log()) / (1 / rho_V - 1 / rho_L)
         liquid_density = rho_L - (p_L - p) / dp_L
         return nans, liquid_density / (
             (KILO * MOL / METER**3) * (NAV * ANGSTROM**3)

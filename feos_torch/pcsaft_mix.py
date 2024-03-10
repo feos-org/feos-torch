@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 
-from si_units import KELVIN, KB, ANGSTROM, NAV, PASCAL, MOL, METER, KILO, JOULE
+from si_units import KELVIN, KB, ANGSTROM, PASCAL, JOULE
 from feos_torch import PcSaftParallel
 
 
@@ -210,26 +210,26 @@ class PcSaftMix:
         return phi2 * phi2 / (phi2 - phi3)
 
     def phi_self_assoc(self, associating, temperature, density, d, zeta2, zeta3_m1):
-        sigma = self.sigma[associating, :]
-        kappa_ab = self.kappa_ab[associating, :]
-        epsilon_k_ab = self.epsilon_k_ab[associating, :]
+        kappa_ab = self.kappa_ab[associating, :].sum(dim=1, keepdim=True)
+        epsilon_k_ab = self.epsilon_k_ab[associating, :].sum(dim=1, keepdim=True)
         na = self.na[associating, :]
         nb = self.nb[associating, :]
+        sigma = (na * self.sigma[associating, :]).sum(dim=1, keepdim=True) / na.sum(
+            dim=1, keepdim=True
+        )
+        d = (na * d).sum(dim=1, keepdim=True) / na.sum(dim=1, keepdim=True)
 
-        delta = sum(
-            association_strength(
-                i,
-                i,
-                temperature,
-                sigma,
-                kappa_ab,
-                epsilon_k_ab,
-                None,
-                d,
-                zeta2,
-                zeta3_m1,
-            )
-            for i in range(sigma.shape[1])
+        delta = association_strength(
+            0,
+            0,
+            temperature,
+            sigma,
+            kappa_ab,
+            epsilon_k_ab,
+            None,
+            d,
+            zeta2,
+            zeta3_m1,
         )
         rhoa = (na * density).sum(dim=1, keepdim=True)
         rhob = (nb * density).sum(dim=1, keepdim=True)
@@ -398,16 +398,16 @@ class PcSaftMix:
         (k, n) = density.shape
         volume = DualTensor(
             torch.ones_like(temperature)[:, None],
-            torch.zeros((k, 1, n + 1), dtype=torch.float64),
+            torch.zeros((k, 1, n + 1), device=temperature.device, dtype=torch.float64),
             torch.ones_like(temperature)[:, None],
-            torch.zeros((k, 1, n + 1), dtype=torch.float64),
+            torch.zeros((k, 1, n + 1), device=temperature.device, dtype=torch.float64),
         )
         volume.eps1[:, :, n] = 1
         moles = DualTensor(
             density,
-            torch.zeros((k, n, n + 1), dtype=torch.float64),
-            torch.zeros((k, n), dtype=torch.float64),
-            torch.zeros((k, n, n + 1), dtype=torch.float64),
+            torch.zeros((k, n, n + 1), device=temperature.device, dtype=torch.float64),
+            torch.zeros((k, n), device=temperature.device, dtype=torch.float64),
+            torch.zeros((k, n, n + 1), device=temperature.device, dtype=torch.float64),
         )
         for i in range(n):
             moles.eps1[:, i, i] = 1
@@ -422,15 +422,15 @@ class PcSaftMix:
         return a, p, mu, v
 
     def bubble_point(self, temperature, liquid_molefracs, pressure):
-        density = PcSaftParallel.bubble_point(
+        density, nans = PcSaftParallel.bubble_point(
             self.parameters,
             self.kij_np,
             temperature.detach().cpu().numpy(),
             liquid_molefracs.detach().cpu().numpy(),
             pressure.detach().cpu().numpy(),
         )
-        nans = np.isnan(density[:, 0]) | (density[:, 0] < 1e-20)
-        density = torch.from_numpy(density[~nans, :])
+        density = torch.from_numpy(density).to(self.m.device)
+        nans = torch.from_numpy(nans).to(self.m.device)
         temperature = temperature[~nans]
         self.reduce(nans)
 
@@ -441,22 +441,20 @@ class PcSaftMix:
         _, p_L, mu_i_L, v_i_L = self.derivatives(temperature, rho_i_L)
         a_V = self.helmholtz_energy_density(temperature, rho_i_V)[:, 0] / rho_V
         v_L = (y * v_i_L).sum(dim=1)
-        g_L = (y * (np.log(rho_i_V / rho_i_L) - mu_i_L)).sum(dim=1)
+        g_L = (y * ((rho_i_V / rho_i_L).log() - mu_i_L)).sum(dim=1)
         p = -(a_V + p_L * v_L + g_L - 1) / (1 / rho_V - v_L)
         return p * temperature * (KB * KELVIN / ANGSTROM**3 / PASCAL), nans
 
     def dew_point(self, temperature, vapor_molefracs, pressure):
-        density = PcSaftParallel.dew_point(
+        density, nans = PcSaftParallel.dew_point(
             self.parameters,
             self.kij_np,
             temperature.detach().cpu().numpy(),
             vapor_molefracs.detach().cpu().numpy(),
             pressure.detach().cpu().numpy(),
         )
-        nans = np.isnan(density[:, 0]) | (
-            density[:, 0] < 1e-20
-        )  # | (density[:,0] < 0.1*(pressure/temperature).detach().numpy()*(PASCAL*ANGSTROM**3/KB/KELVIN))# | (density[:, 0] < 1e-20)
-        density = torch.from_numpy(density[~nans, :])
+        density = torch.from_numpy(density).to(self.m.device)
+        nans = torch.from_numpy(nans).to(self.m.device)
         temperature = temperature[~nans]
         self.reduce(nans)
 
@@ -467,7 +465,7 @@ class PcSaftMix:
         _, p_V, mu_i_V, v_i_V = self.derivatives(temperature, rho_i_V)
         a_L = self.helmholtz_energy_density(temperature, rho_i_L)[:, 0] / rho_L
         v_V = (x * v_i_V).sum(dim=1)
-        g_V = (x * (np.log(rho_i_L / rho_i_V) - mu_i_V)).sum(dim=1)
+        g_V = (x * ((rho_i_L / rho_i_V).log() - mu_i_V)).sum(dim=1)
         p = -(a_L + p_V * v_V + g_V - 1) / (1 / rho_L - v_V)
         return p * temperature * (KB * KELVIN / ANGSTROM**3 / PASCAL), nans
 
