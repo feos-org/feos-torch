@@ -1,5 +1,5 @@
 # feos-torch
-Parallel evaluation of vapor pressures and liquid densities including gradients using PyTorch
+Parallel evaluation of vapor pressures, liquid densities, and bubble/dew points including gradients using PyTorch.
 
 ## Installation
 Install with (needs rust compiler)
