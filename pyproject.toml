@@ -10,5 +10,5 @@ name = "feos-torch"
 dependencies = [
     "torch",
     "numpy",
-    "si-units,
+    "si-units",
 ]
