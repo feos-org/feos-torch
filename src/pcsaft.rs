@@ -5,23 +5,24 @@ use feos::core::si::{KELVIN, MOL, PASCAL};
 use feos::core::{DensityInitialization, PhaseEquilibrium, State};
 use feos::pcsaft::{PcSaft, PcSaftBinaryRecord, PcSaftParameters, PcSaftRecord};
 use ndarray::{arr1, s, Array1, Array2, ArrayView1, ArrayView2, ArrayView3, Zip};
-use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3, ToPyArray};
+use numpy::prelude::*;
+use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3};
 use pyo3::prelude::*;
 use std::sync::Arc;
 
-#[pyclass]
-pub struct PcSaftParallel;
+#[pyclass(name = "PcSaft")]
+pub struct PyPcSaft;
 
 #[pymethods]
-impl PcSaftParallel {
+impl PyPcSaft {
     #[staticmethod]
     fn vapor_pressure<'py>(
         parameters: PyReadonlyArray2<f64>,
         temperature: PyReadonlyArray1<f64>,
         py: Python<'py>,
-    ) -> (&'py PyArray2<f64>, &'py PyArray1<bool>) {
+    ) -> (Bound<'py, PyArray2<f64>>, Bound<'py, PyArray1<bool>>) {
         let (rho, status) = vapor_pressure_(parameters.as_array(), temperature.as_array());
-        (rho.view().to_pyarray(py), status.view().to_pyarray(py))
+        (rho.into_pyarray_bound(py), status.into_pyarray_bound(py))
     }
 
     #[staticmethod]
@@ -30,13 +31,13 @@ impl PcSaftParallel {
         temperature: PyReadonlyArray1<f64>,
         pressure: PyReadonlyArray1<f64>,
         py: Python<'py>,
-    ) -> (&'py PyArray1<f64>, &'py PyArray1<bool>) {
+    ) -> (Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<bool>>) {
         let (rho, status) = liquid_density_(
             parameters.as_array(),
             temperature.as_array(),
             pressure.as_array(),
         );
-        (rho.view().to_pyarray(py), status.view().to_pyarray(py))
+        (rho.into_pyarray_bound(py), status.into_pyarray_bound(py))
     }
 
     #[staticmethod]
@@ -47,7 +48,7 @@ impl PcSaftParallel {
         liquid_molefracs: PyReadonlyArray1<f64>,
         pressure: PyReadonlyArray1<f64>,
         py: Python<'py>,
-    ) -> (&'py PyArray2<f64>, &'py PyArray1<bool>) {
+    ) -> (Bound<'py, PyArray2<f64>>, Bound<'py, PyArray1<bool>>) {
         let (rho, status) = bubble_point_(
             parameters.as_array(),
             kij.as_array(),
@@ -55,7 +56,7 @@ impl PcSaftParallel {
             liquid_molefracs.as_array(),
             pressure.as_array(),
         );
-        (rho.view().to_pyarray(py), status.view().to_pyarray(py))
+        (rho.into_pyarray_bound(py), status.into_pyarray_bound(py))
     }
 
     #[staticmethod]
@@ -66,7 +67,7 @@ impl PcSaftParallel {
         vapor_molefracs: PyReadonlyArray1<f64>,
         pressure: PyReadonlyArray1<f64>,
         py: Python<'py>,
-    ) -> (&'py PyArray2<f64>, &'py PyArray1<bool>) {
+    ) -> (Bound<'py, PyArray2<f64>>, Bound<'py, PyArray1<bool>>) {
         let (rho, status) = dew_point_(
             parameters.as_array(),
             kij.as_array(),
@@ -74,7 +75,7 @@ impl PcSaftParallel {
             vapor_molefracs.as_array(),
             pressure.as_array(),
         );
-        (rho.view().to_pyarray(py), status.view().to_pyarray(py))
+        (rho.into_pyarray_bound(py), status.into_pyarray_bound(py))
     }
 }
 
@@ -212,7 +213,9 @@ fn dew_point_(
     filter_binary(vles)
 }
 
-fn filter_binary<E>(vles: Array1<Option<PhaseEquilibrium<E, 2>>>) -> (Array2<f64>, Array1<bool>) {
+pub fn filter_binary<E>(
+    vles: Array1<Option<PhaseEquilibrium<E, 2>>>,
+) -> (Array2<f64>, Array1<bool>) {
     let status = vles.iter().map(|v| v.is_none()).collect();
     let vles: Array1<_> = vles.into_iter().flatten().collect();
     let mut rho = Array2::zeros([vles.len(), 4]);

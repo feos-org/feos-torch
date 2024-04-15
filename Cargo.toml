@@ -18,8 +18,8 @@ crate-type = ["cdylib"]
 [dependencies]
 feos = { version = "0.6", features = ["pcsaft", "gc_pcsaft"] }
 ndarray = { version = "0.15", features = ["rayon"] }
-pyo3 = { version = "0.20", features = ["extension-module", "abi3", "abi3-py37"] }
-numpy = "0.20"
+pyo3 = { version = "0.21", features = ["extension-module", "abi3", "abi3-py37"] }
+numpy = "0.21"
 
 [profile.release-lto]
 inherits = "release"

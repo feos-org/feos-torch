@@ -1,17 +1,19 @@
 #![warn(clippy::all)]
 #![allow(clippy::borrow_deref_ref)]
+use super::pcsaft::filter_binary;
 use feos::association::AssociationRecord;
 use feos::core::parameter::{BinaryRecord, ChemicalRecord, ParameterHetero, SegmentRecord};
 use feos::core::si::{KELVIN, PASCAL};
 use feos::core::PhaseEquilibrium;
 use feos::gc_pcsaft::{GcPcSaft, GcPcSaftEosParameters, GcPcSaftRecord};
-use ndarray::{arr1, s, Array2, ArrayView1, Zip};
-use numpy::{PyArray2, PyReadonlyArray1, ToPyArray};
+use ndarray::{arr1, Array1, Array2, ArrayView1, Zip};
+use numpy::{prelude::*, PyArray1};
+use numpy::{PyArray2, PyReadonlyArray1};
 use pyo3::prelude::*;
 use std::sync::Arc;
 
-#[pyclass]
-pub struct GcPcSaftParallel {
+#[pyclass(name = "GcPcSaft")]
+pub struct PyGcPcSaft {
     segment_records: Vec<SegmentRecord<GcPcSaftRecord>>,
     chemical_records: Vec<[ChemicalRecord; 2]>,
     binary_segment_records: Vec<BinaryRecord<String, f64>>,
@@ -19,14 +21,14 @@ pub struct GcPcSaftParallel {
 }
 
 #[pymethods]
-impl GcPcSaftParallel {
+impl PyGcPcSaft {
     #[new]
     fn new(
         segment_records: Vec<(String, PyReadonlyArray1<f64>)>,
         segments: Vec<[Vec<String>; 2]>,
         bonds: Vec<[Vec<[usize; 2]>; 2]>,
         binary_segment_records: Vec<(String, String, f64)>,
-        phi: &PyArray2<f64>,
+        phi: &Bound<'_, PyArray2<f64>>,
     ) -> Self {
         let segment_records = segment_records
             .into_iter()
@@ -72,14 +74,13 @@ impl GcPcSaftParallel {
         liquid_molefracs: PyReadonlyArray1<f64>,
         pressure: PyReadonlyArray1<f64>,
         py: Python<'py>,
-    ) -> &'py PyArray2<f64> {
-        self.bubble_point_(
+    ) -> (Bound<'py, PyArray2<f64>>, Bound<'py, PyArray1<bool>>) {
+        let (rho, status) = self.bubble_point_(
             temperature.as_array(),
             liquid_molefracs.as_array(),
             pressure.as_array(),
-        )
-        .view()
-        .to_pyarray(py)
+        );
+        (rho.into_pyarray_bound(py), status.into_pyarray_bound(py))
     }
 
     fn dew_point<'py>(
@@ -88,32 +89,29 @@ impl GcPcSaftParallel {
         vapor_molefracs: PyReadonlyArray1<f64>,
         pressure: PyReadonlyArray1<f64>,
         py: Python<'py>,
-    ) -> &'py PyArray2<f64> {
-        self.dew_point_(
+    ) -> (Bound<'py, PyArray2<f64>>, Bound<'py, PyArray1<bool>>) {
+        let (rho, status) = self.dew_point_(
             temperature.as_array(),
             vapor_molefracs.as_array(),
             pressure.as_array(),
-        )
-        .view()
-        .to_pyarray(py)
+        );
+        (rho.into_pyarray_bound(py), status.into_pyarray_bound(py))
     }
 }
 
-impl GcPcSaftParallel {
+impl PyGcPcSaft {
     fn bubble_point_(
         &self,
         temperature: ArrayView1<f64>,
         liquid_molefracs: ArrayView1<f64>,
         pressure: ArrayView1<f64>,
-    ) -> Array2<f64> {
-        let mut rho = Array2::zeros([temperature.len(), 4]);
-        Zip::from(rho.rows_mut())
-            .and(ArrayView1::from(&self.chemical_records))
+    ) -> (Array2<f64>, Array1<bool>) {
+        let vles = Zip::from(ArrayView1::from(&self.chemical_records))
             .and(temperature)
             .and(liquid_molefracs)
             .and(pressure)
             .and(self.phi.rows())
-            .par_for_each(|mut rho, cr, &t, &x, &p, phi| {
+            .par_map_collect(|cr, &t, &x, &p, phi| {
                 let [cr1, cr2] = cr.clone();
                 let params = GcPcSaftEosParameters::from_segments(
                     vec![cr1, cr2],
@@ -124,25 +122,17 @@ impl GcPcSaftParallel {
                 .phi(phi.as_slice().unwrap())
                 .unwrap();
                 let eos = Arc::new(GcPcSaft::new(Arc::new(params)));
-                let vle = PhaseEquilibrium::bubble_point(
+                PhaseEquilibrium::bubble_point(
                     &eos,
                     t * KELVIN,
                     &arr1(&[x, 1.0 - x]),
                     Some(p * PASCAL),
                     None,
                     Default::default(),
-                );
-                match vle {
-                    Err(_) => rho.fill(f64::NAN),
-                    Ok(vle) => {
-                        let rho_v = vle.vapor().partial_density.to_reduced();
-                        let rho_l = vle.liquid().partial_density.to_reduced();
-                        rho.slice_mut(s![0..2usize]).assign(&rho_v);
-                        rho.slice_mut(s![2..4usize]).assign(&rho_l);
-                    }
-                }
+                )
+                .ok()
             });
-        rho
+        filter_binary(vles)
     }
 
     fn dew_point_(
@@ -150,15 +140,13 @@ impl GcPcSaftParallel {
         temperature: ArrayView1<f64>,
         vapor_molefracs: ArrayView1<f64>,
         pressure: ArrayView1<f64>,
-    ) -> Array2<f64> {
-        let mut rho = Array2::zeros([temperature.len(), 4]);
-        Zip::from(rho.rows_mut())
-            .and(ArrayView1::from(&self.chemical_records))
+    ) -> (Array2<f64>, Array1<bool>) {
+        let vles = Zip::from(ArrayView1::from(&self.chemical_records))
             .and(temperature)
             .and(vapor_molefracs)
             .and(pressure)
             .and(self.phi.rows())
-            .par_for_each(|mut rho, cr, &t, &y, &p, phi| {
+            .par_map_collect(|cr, &t, &y, &p, phi| {
                 let [cr1, cr2] = cr.clone();
                 let params = GcPcSaftEosParameters::from_segments(
                     vec![cr1, cr2],
@@ -169,24 +157,16 @@ impl GcPcSaftParallel {
                 .phi(phi.as_slice().unwrap())
                 .unwrap();
                 let eos = Arc::new(GcPcSaft::new(Arc::new(params)));
-                let vle = PhaseEquilibrium::dew_point(
+                PhaseEquilibrium::dew_point(
                     &eos,
                     t * KELVIN,
                     &arr1(&[y, 1.0 - y]),
                     Some(p * PASCAL),
                     None,
                     Default::default(),
-                );
-                match vle {
-                    Err(_) => rho.fill(f64::NAN),
-                    Ok(vle) => {
-                        let rho_v = vle.vapor().partial_density.to_reduced();
-                        let rho_l = vle.liquid().partial_density.to_reduced();
-                        rho.slice_mut(s![0..2usize]).assign(&rho_v);
-                        rho.slice_mut(s![2..4usize]).assign(&rho_l);
-                    }
-                }
+                )
+                .ok()
             });
-        rho
+        filter_binary(vles)
     }
 }

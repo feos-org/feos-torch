@@ -1,17 +1,16 @@
 import torch
 import numpy as np
-import json
 from collections import Counter
 
-from si_units import KELVIN, KB, ANGSTROM, NAV, PASCAL, MOL, METER, KILO, JOULE
-from feos_torch import GcPcSaftParallel
+from si_units import KELVIN, KB, ANGSTROM, PASCAL, JOULE
+from feos_torch import GcPcSaft
 
 
 from .dual_torch import Dual2, DualTensor
 from .pcsaft_pure import A0, A1, A2, B0, B1, B2, AD, BD, CD
 
 
-class GcPcSaft:
+class GcPcSaftMix:
     def __init__(
         self,
         segment_identifier,
@@ -106,7 +105,7 @@ class GcPcSaft:
             )
             for i, ident in enumerate(segment_identifier)
         ]
-        self.gc_pcsaft = GcPcSaftParallel(
+        self.gc_pcsaft = GcPcSaft(
             segment_records,
             segment_lists,
             bond_lists,
@@ -469,13 +468,13 @@ class GcPcSaft:
         return a, p, mu, v
 
     def bubble_point(self, temperature, liquid_molefracs, pressure):
-        density = self.gc_pcsaft.bubble_point(
+        density, nans = self.gc_pcsaft.bubble_point(
             temperature.detach().cpu().numpy(),
             liquid_molefracs.detach().cpu().numpy(),
             pressure.detach().cpu().numpy(),
         )
-        nans = np.isnan(density[:, 0])
-        density = torch.from_numpy(density[~nans, :])
+        density = torch.from_numpy(density).to(self.m.device)
+        nans = torch.from_numpy(nans).to(self.m.device)
         temperature = temperature[~nans]
         self.reduce(nans)
 
@@ -491,15 +490,13 @@ class GcPcSaft:
         return p * temperature * (KB * KELVIN / ANGSTROM**3 / PASCAL), nans
 
     def dew_point(self, temperature, vapor_molefracs, pressure):
-        density = self.gc_pcsaft.dew_point(
+        density, nans = self.gc_pcsaft.dew_point(
             temperature.detach().cpu().numpy(),
             vapor_molefracs.detach().cpu().numpy(),
             pressure.detach().cpu().numpy(),
         )
-        nans = np.isnan(density[:, 0]) | (
-            density[:, 0] < 1e-20
-        )  # | (density[:,0] < 0.1*(pressure/temperature).detach().numpy()*(PASCAL*ANGSTROM**3/KB/KELVIN))# | (density[:, 0] < 1e-20)
-        density = torch.from_numpy(density[~nans, :])
+        density = torch.from_numpy(density).to(self.m.device)
+        nans = torch.from_numpy(nans).to(self.m.device)
         temperature = temperature[~nans]
         self.reduce(nans)
 

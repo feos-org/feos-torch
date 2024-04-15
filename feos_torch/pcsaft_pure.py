@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 from si_units import KELVIN, KB, ANGSTROM, NAV, PASCAL, MOL, METER, KILO, JOULE
-from feos_torch import PcSaftParallel
+from feos_torch import PcSaft
 
 
 from .dual import Dual3
@@ -182,7 +182,7 @@ class PcSaftPure:
         return a.re, density - a.re + density * a.v1, 1 + density * a.v2
 
     def liquid_density(self, temperature, pressure):
-        density, nans = PcSaftParallel.liquid_density(
+        density, nans = PcSaft.liquid_density(
             self.parameters,
             temperature.detach().cpu().numpy(),
             pressure.detach().cpu().numpy(),
@@ -199,7 +199,7 @@ class PcSaftPure:
         return nans, density / ((KILO * MOL / METER**3) * (NAV * ANGSTROM**3))
 
     def vapor_pressure(self, temperature):
-        density, nans = PcSaftParallel.vapor_pressure(
+        density, nans = PcSaft.vapor_pressure(
             self.parameters, temperature.detach().cpu().numpy()
         )
         density = torch.from_numpy(density).to(self.m.device)
@@ -215,7 +215,7 @@ class PcSaftPure:
         return nans, p * temperature * (KB * KELVIN / ANGSTROM**3 / PASCAL)
 
     def equilibrium_liquid_density(self, temperature):
-        density, nans = PcSaftParallel.vapor_pressure(
+        density, nans = PcSaft.vapor_pressure(
             self.parameters, temperature.detach().cpu().numpy()
         )
         density = torch.from_numpy(density).to(self.m.device)
@@ -230,9 +230,7 @@ class PcSaftPure:
         a_V = self.helmholtz_energy(temperature, rho_V) / rho_V
         p = -(a_V - a_L + (rho_V / rho_L).log()) / (1 / rho_V - 1 / rho_L)
         liquid_density = rho_L - (p_L - p) / dp_L
-        return nans, liquid_density / (
-            (KILO * MOL / METER**3) * (NAV * ANGSTROM**3)
-        )
+        return nans, liquid_density / ((KILO * MOL / METER**3) * (NAV * ANGSTROM**3))
 
     def reduce(self, nans):
         self.m = self.m[~nans]

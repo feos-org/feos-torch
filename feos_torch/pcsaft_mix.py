@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 from si_units import KELVIN, KB, ANGSTROM, PASCAL, JOULE
-from feos_torch import PcSaftParallel
+from feos_torch import PcSaft
 
 
 from .dual_torch import Dual2, DualTensor
@@ -420,7 +420,7 @@ class PcSaftMix:
         return a, p, mu, v
 
     def bubble_point(self, temperature, liquid_molefracs, pressure):
-        density, nans = PcSaftParallel.bubble_point(
+        density, nans = PcSaft.bubble_point(
             self.parameters,
             self.kij_np,
             temperature.detach().cpu().numpy(),
@@ -444,7 +444,7 @@ class PcSaftMix:
         return p * temperature * (KB * KELVIN / ANGSTROM**3 / PASCAL), nans
 
     def dew_point(self, temperature, vapor_molefracs, pressure):
-        density, nans = PcSaftParallel.dew_point(
+        density, nans = PcSaft.dew_point(
             self.parameters,
             self.kij_np,
             temperature.detach().cpu().numpy(),

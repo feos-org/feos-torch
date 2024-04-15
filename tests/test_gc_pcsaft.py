@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import json
-from feos_torch.gc_pcsaft import GcPcSaft
+from feos_torch.gc_pcsaft import GcPcSaftMix
 from feos.eos import State, Contributions, PhaseEquilibrium, EquationOfState
 from feos.gc_pcsaft import (
     GcPcSaftEosParameters,
@@ -87,14 +87,13 @@ def test_gc_pcsaft():
         [
             (
                 n,
-                a
-                * (1 / states[-1].volume / KB / states[-1].temperature * ANGSTROM**3),
+                a * (1 / states[-1].volume / KB / states[-1].temperature * ANGSTROM**3),
             )
             for n, a in states[-1].residual_helmholtz_energy_contributions()
         ]
     )
 
-    eos = GcPcSaft(*parse_segments(), segment_lists, bond_lists, kab_list, phi)
+    eos = GcPcSaftMix(*parse_segments(), segment_lists, bond_lists, kab_list, phi)
     a = eos.helmholtz_energy_density(temperature, density)
     _, p, mu, v = eos.derivatives(temperature, density)
 
@@ -142,7 +141,7 @@ def test_bubble_point():
     temperature = torch.tensor([150], dtype=torch.float64, requires_grad=True)
     pressure = torch.tensor([1e5], dtype=torch.float64, requires_grad=True)
     liquid_molefracs = torch.tensor([0.5], dtype=torch.float64, requires_grad=True)
-    eos = GcPcSaft(*parse_segments(), segment_lists, bond_lists, kab_list, phi)
+    eos = GcPcSaftMix(*parse_segments(), segment_lists, bond_lists, kab_list, phi)
     p, _ = eos.bubble_point(temperature, liquid_molefracs, pressure)
     p[0].backward()
     print(kab.grad[0].item())
@@ -189,7 +188,7 @@ def test_dew_point():
     temperature = torch.tensor([150], dtype=torch.float64, requires_grad=True)
     pressure = torch.tensor([1e5], dtype=torch.float64, requires_grad=True)
     vapor_molefracs = torch.tensor([0.5], dtype=torch.float64, requires_grad=True)
-    eos = GcPcSaft(*parse_segments(), segment_lists, bond_lists, kab_list, phi)
+    eos = GcPcSaftMix(*parse_segments(), segment_lists, bond_lists, kab_list, phi)
     p, _ = eos.dew_point(temperature, vapor_molefracs, pressure)
     p[0].backward()
     print(kab.grad[0].item())
