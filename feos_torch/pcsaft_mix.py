@@ -115,9 +115,7 @@ class PcSaftMix:
         )
 
         # association
-        associating_comps = torch.count_nonzero(
-            self.kappa_ab * self.epsilon_k_ab, dim=1
-        )
+        associating_comps = torch.count_nonzero(self.na + self.nb, dim=1)
         self_associating_comps = torch.count_nonzero(self.na * self.nb, dim=1)
         if torch.any(associating_comps > 2):
             raise Exception("Only up to two associating components are allowed!")
