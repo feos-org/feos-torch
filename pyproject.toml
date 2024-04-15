@@ -7,3 +7,8 @@ bindings = "pyo3"
 
 [project]
 name = "feos-torch"
+dependencies = [
+    "torch",
+    "numpy",
+    "si-units",
+]
