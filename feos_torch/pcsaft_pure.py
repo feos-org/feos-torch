@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from torch.autograd import Function
 
 from si_units import KELVIN, KB, ANGSTROM, NAV, PASCAL, MOL, METER, KILO, JOULE
 from feos_torch import PcSaft
@@ -241,3 +242,27 @@ class PcSaftPure:
         self.epsilon_k_ab = self.epsilon_k_ab[~nans]
         self.na = self.na[~nans]
         self.nb = self.nb[~nans]
+
+
+class PcSaftVaporPressure(Function):
+    @staticmethod
+    def forward(ctx, parameters, temperature):
+        if temperature.requires_grad:
+            raise ValueError(
+                "Argument `temperature` is not allowed to require gradients."
+            )
+        pressure, grad, status = PcSaft.vapor_pressure2(
+            parameters.cpu().numpy(), temperature.cpu().numpy()
+        )
+        pressure = torch.tensor(pressure)
+        grad = torch.tensor(grad)
+        status = torch.tensor(status)
+        ctx.save_for_backward(grad, status)
+        return pressure, status
+
+    @staticmethod
+    def backward(ctx, pressure_grad, status):
+        grad, status = ctx.saved_tensors
+        par_grad = torch.zeros([len(status), grad.shape[1]], dtype=pressure_grad.dtype)
+        par_grad[status, :] = pressure_grad.unsqueeze(1) * grad
+        return par_grad, None

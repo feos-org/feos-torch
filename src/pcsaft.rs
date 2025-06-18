@@ -1,13 +1,16 @@
 #![warn(clippy::all)]
 #![allow(clippy::borrow_deref_ref)]
 use feos::core::parameter::{Parameter, PureRecord};
-use feos::core::si::{KELVIN, MOL, PASCAL};
-use feos::core::{DensityInitialization, PhaseEquilibrium, State};
+use feos::core::{DensityInitialization, PhaseEquilibrium, ReferenceSystem, State};
 use feos::pcsaft::{PcSaft, PcSaftBinaryRecord, PcSaftParameters, PcSaftRecord};
+use feos_ad::eos::PcSaftPure;
+use feos_ad::{vapor_pressure, ParametersAD};
+use nalgebra::{Const, U1};
 use ndarray::{arr1, s, Array1, Array2, ArrayView1, ArrayView2, ArrayView3, Zip};
 use numpy::prelude::*;
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3};
 use pyo3::prelude::*;
+use quantity::{KELVIN, MOL, PASCAL};
 use std::sync::Arc;
 
 #[pyclass(name = "PcSaft")]
@@ -22,7 +25,27 @@ impl PyPcSaft {
         py: Python<'py>,
     ) -> (Bound<'py, PyArray2<f64>>, Bound<'py, PyArray1<bool>>) {
         let (rho, status) = vapor_pressure_(parameters.as_array(), temperature.as_array());
-        (rho.into_pyarray_bound(py), status.into_pyarray_bound(py))
+        (rho.into_pyarray(py), status.into_pyarray(py))
+    }
+
+    #[staticmethod]
+    #[expect(clippy::type_complexity)]
+    fn vapor_pressure2<'py>(
+        parameters: PyReadonlyArray2<f64>,
+        temperature: PyReadonlyArray1<f64>,
+        py: Python<'py>,
+    ) -> (
+        Bound<'py, PyArray1<f64>>,
+        Bound<'py, PyArray2<f64>>,
+        Bound<'py, PyArray1<bool>>,
+    ) {
+        let (pressure, grad, status) =
+            vapor_pressure2_(parameters.as_array(), temperature.as_array());
+        (
+            pressure.into_pyarray(py),
+            grad.into_pyarray(py),
+            status.into_pyarray(py),
+        )
     }
 
     #[staticmethod]
@@ -37,7 +60,7 @@ impl PyPcSaft {
             temperature.as_array(),
             pressure.as_array(),
         );
-        (rho.into_pyarray_bound(py), status.into_pyarray_bound(py))
+        (rho.into_pyarray(py), status.into_pyarray(py))
     }
 
     #[staticmethod]
@@ -56,7 +79,7 @@ impl PyPcSaft {
             liquid_molefracs.as_array(),
             pressure.as_array(),
         );
-        (rho.into_pyarray_bound(py), status.into_pyarray_bound(py))
+        (rho.into_pyarray(py), status.into_pyarray(py))
     }
 
     #[staticmethod]
@@ -75,7 +98,7 @@ impl PyPcSaft {
             vapor_molefracs.as_array(),
             pressure.as_array(),
         );
-        (rho.into_pyarray_bound(py), status.into_pyarray_bound(py))
+        (rho.into_pyarray(py), status.into_pyarray(py))
     }
 }
 
@@ -100,6 +123,44 @@ fn vapor_pressure_(
             rho[1] = vle.liquid().density.to_reduced();
         });
     (rho, status)
+}
+
+const PCSAFT_PARAMS: [&str; 8] = [
+    "m",
+    "sigma",
+    "epsilon_k",
+    "mu",
+    "kappa_ab",
+    "epsilon_k_ab",
+    "na",
+    "nb",
+];
+
+fn vapor_pressure2_(
+    parameters: ArrayView2<f64>,
+    temperature: ArrayView1<f64>,
+) -> (Array1<f64>, Array2<f64>, Array1<bool>) {
+    let pressure_dual = Zip::from(parameters.rows())
+        .and(&temperature)
+        .par_map_collect(|par, &t| {
+            let par = [0, 1, 2, 3, 4, 5, 6, 7].map(|i| par[i]);
+            let pcsaft = PcSaftPure(par).wrap::<1>();
+            let pcsaft = pcsaft.named_derivatives(PCSAFT_PARAMS);
+            vapor_pressure(&pcsaft, t * KELVIN).map(|p| p.convert_into(PASCAL))
+        });
+    let status = pressure_dual.iter().map(|p| p.is_ok()).collect();
+    let pressure_dual: Array1<_> = pressure_dual.into_iter().flatten().collect();
+    let mut pressure = Array1::zeros(pressure_dual.len());
+    let mut grad = Array2::zeros([pressure_dual.len(), 8]);
+    Zip::from(grad.rows_mut())
+        .and(&mut pressure)
+        .and(&pressure_dual)
+        .for_each(|mut grad, p, p_dual| {
+            *p = p_dual.re;
+            let eps = p_dual.eps.unwrap_generic(Const::<8>, U1).data.0[0].to_vec();
+            grad.assign(&Array1::from(eps));
+        });
+    (pressure, grad, status)
 }
 
 fn liquid_density_(

@@ -3,13 +3,13 @@
 use super::pcsaft::filter_binary;
 use feos::association::AssociationRecord;
 use feos::core::parameter::{BinaryRecord, ChemicalRecord, ParameterHetero, SegmentRecord};
-use feos::core::si::{KELVIN, PASCAL};
 use feos::core::PhaseEquilibrium;
 use feos::gc_pcsaft::{GcPcSaft, GcPcSaftEosParameters, GcPcSaftRecord};
 use ndarray::{arr1, Array1, Array2, ArrayView1, Zip};
 use numpy::{prelude::*, PyArray1};
 use numpy::{PyArray2, PyReadonlyArray1};
 use pyo3::prelude::*;
+use quantity::{KELVIN, PASCAL};
 use std::sync::Arc;
 
 #[pyclass(name = "GcPcSaft")]
@@ -80,7 +80,7 @@ impl PyGcPcSaft {
             liquid_molefracs.as_array(),
             pressure.as_array(),
         );
-        (rho.into_pyarray_bound(py), status.into_pyarray_bound(py))
+        (rho.into_pyarray(py), status.into_pyarray(py))
     }
 
     fn dew_point<'py>(
@@ -95,7 +95,7 @@ impl PyGcPcSaft {
             vapor_molefracs.as_array(),
             pressure.as_array(),
         );
-        (rho.into_pyarray_bound(py), status.into_pyarray_bound(py))
+        (rho.into_pyarray(py), status.into_pyarray(py))
     }
 }
 

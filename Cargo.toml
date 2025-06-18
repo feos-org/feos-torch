@@ -7,7 +7,12 @@ readme = "README.md"
 license = "MIT OR Apache-2.0"
 description = "FeOs-torch - Automatic differentiation of phase equilibria."
 repository = "https://github.com/feos-org/feos-torch"
-keywords = ["physics", "thermodynamics", "equations_of_state", "phase_equilibria"]
+keywords = [
+    "physics",
+    "thermodynamics",
+    "equations_of_state",
+    "phase_equilibria",
+]
 categories = ["science"]
 
 [lib]
@@ -15,10 +20,17 @@ name = "feos_torch"
 crate-type = ["cdylib"]
 
 [dependencies]
-feos = { version = "0.6", features = ["pcsaft", "gc_pcsaft"] }
-ndarray = { version = "0.15", features = ["rayon"] }
-pyo3 = { version = "0.21", features = ["extension-module", "abi3", "abi3-py37"] }
-numpy = "0.21"
+feos = { version = "0.8", features = ["pcsaft", "gc_pcsaft"] }
+ndarray = { version = "0.16", features = ["rayon"] }
+pyo3 = { version = "0.24", features = [
+    "extension-module",
+    "abi3",
+    "abi3-py37",
+] }
+numpy = "0.24"
+quantity = "0.10"
+feos-ad = { version = "0.2.3", features = ["parameter_fit"] }
+nalgebra = "0.33"
 
 [profile.release-lto]
 inherits = "release"
